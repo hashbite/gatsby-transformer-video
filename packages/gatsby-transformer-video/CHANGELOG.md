@@ -1,5 +1,11 @@
 #### 0.2.0 (2020-11-02)
 
+## 0.3.0-next.0
+
+### Minor Changes
+
+- update to Gatsby v3
+
 ##### Build System / Dependencies
 
 - upgrade dependencies ([2457d172](https://github.com/gatsbyjs/gatsby/commit/2457d1722cf26404ac3db33068d202ff1f58df0d))
