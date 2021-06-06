@@ -86,13 +86,11 @@ jobs:
 
       # Clear cache (@todo make optional with empty commit)
       - name: Clear Gatsby cache
-        run: npx gatsby clean
-        working-directory: ./packages/example
+        run: cd ./packages/example && npx gatsby clean
 
       # Build
       - name: Build Gatsby site
-        run: npm run build -- --verbose
-        working-directory: ./packages/example
+        run: cd ./packages/example && npm run build -- --verbose
 
   deploy:
     name: Deploy
