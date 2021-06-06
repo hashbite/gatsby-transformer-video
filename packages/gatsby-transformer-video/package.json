@@ -22,6 +22,9 @@
     "url": "https://github.com/hashbite/gastby-transformer-video.git",
     "directory": "packages/gatsby-transformer-video"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "dependencies": {
     "command-exists": "^1.2.9",
