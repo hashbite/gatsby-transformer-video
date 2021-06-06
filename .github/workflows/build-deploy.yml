@@ -35,7 +35,7 @@ jobs:
         env:
           cache-name: gatsby-public
         with:
-          path: ./packages/gatsby-transformer-video/public
+          path: ./packages/example/public
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ needs.context.outputs.branch }}-${{ hashFiles('**/yarn.lock') }}
 
       - name: Cache Gatsby .cache dir
@@ -44,7 +44,7 @@ jobs:
         env:
           cache-name: gatsby-cache
         with:
-          path: ./packages/gatsby-transformer-video/.cache
+          path: ./packages/example/.cache
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ needs.context.outputs.branch }}-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ env.cache-name }}-${{ needs.context.outputs.branch }}-${{ hashFiles('**/yarn.lock') }}
@@ -70,14 +70,10 @@ jobs:
       - name: Install dependencies via yarn
         run: yarn install --prefer-offline --frozen-lockfile --ignore-optional
 
-      - run: du -h -d 2 --exclude=./node_modules .
-
       # Build
       - name: Build Gatsby site
         run: npm run build -- --verbose
-        working-directory: ./packages/gatsby-transformer-video
-
-      - run: du -h -d 2 --exclude=./node_modules .
+        working-directory: ./packages/example
 
   deploy:
     name: Deploy
@@ -93,16 +89,14 @@ jobs:
         env:
           cache-name: gatsby-public
         with:
-          path: ./packages/gatsby-transformer-video/public
+          path: ./packages/example/public
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ needs.context.outputs.branch }}-${{ hashFiles('**/yarn.lock') }}
-
-      - run: du -h -d 2 --exclude=./node_modules .
 
       # Deploy
       - name: "[Prod] Deploy to Netlify"
         if: github.event_name == 'push'
         run: npx netlify deploy --dir=public --debug --prod --message "${{ needs.context.outputs.commitMsg }} (${{ github.event.after }})"
-        working-directory: ./packages/gatsby-transformer-video
+        working-directory: ./packages/example
         env:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -111,7 +105,7 @@ jobs:
         id: pr-deploy
         if: github.event_name == 'pull_request'
         run: echo "::set-output name=deploy-id::$(npx netlify deploy --dir=public --debug --alias "${{ needs.context.outputs.branch }}" --message "${{github.head_ref}} - ${{ needs.context.outputs.commitMsg }} (${{ github.event.after }})" | grep "Logs:" | grep -oE "[^\/]+$")"
-        working-directory: ./packages/gatsby-transformer-video
+        working-directory: ./packages/example
         env:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
