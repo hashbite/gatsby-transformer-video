@@ -1,3 +1,4 @@
+console.log('config', { dir: __dirname, pwd: process.cwd() })
 module.exports = {
   plugins: [
     {
