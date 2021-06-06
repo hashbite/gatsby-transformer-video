@@ -1,0 +1,11 @@
+{
+  "mode": "pre",
+  "tag": "next",
+  "initialVersions": {
+    "using-gatsby-transformer-video": "0.0.0",
+    "gatsby-transformer-video": "0.2.4"
+  },
+  "changesets": [
+    "old-lobsters-drum"
+  ]
+}
