@@ -70,6 +70,11 @@ jobs:
       - name: Install dependencies via yarn
         run: yarn install --prefer-offline --frozen-lockfile --ignore-optional
 
+      # Clear cache (@todo make optional with empty commit)
+      - name: Clear Gatsby cache
+        run: npx gatsby clean
+        working-directory: ./packages/example
+
       # Build
       - name: Build Gatsby site
         run: npm run build -- --verbose
