@@ -1,13 +1,15 @@
 {
   "name": "using-gatsby-transformer-video",
+  "version": "0.0.0",
   "private": true,
   "description": "Gatsby example site using using-gatsby-transformer-video",
-  "author": "Benedikt Rötsch <opensource@axe312.de>",
+  "author": "Benedikt Rötsch <opensource@hashbite.net>",
   "dependencies": {
-    "gatsby": "latest",
-    "gatsby-link": "latest",
-    "gatsby-source-filesystem": "latest",
-    "gatsby-transformer-video": "latest"
+    "gatsby": "3.6.2",
+    "gatsby-source-filesystem": "3.6.0",
+    "gatsby-transformer-video": "0.2.4",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2"
   },
   "license": "MIT",
   "main": "n/a",

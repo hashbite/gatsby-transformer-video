@@ -17,7 +17,7 @@
 
 ## Usage example
 
-https://github.com/hashbite/gastby-transformer-video/tree/example
+https://github.com/hashbite/gastby-transformer-video/tree/packages/example
 
 ## Installation
 
@@ -101,7 +101,7 @@ module.exports = {
             extension: `mp4`,
             converter: function ({ ffmpegSession, videoStreamMetadata }) {
               // Example:
-              // https://github.com/hashbite/gastby-transformer-video/blob/example/gatsby-config.js
+              // https://github.com/hashbite/gastby-transformer-video/blob/packages/example/gatsby-config.js
             },
           },
         },
