@@ -2,7 +2,7 @@
 
 > Convert videos via FFMPEG. Easily convert & host **small** videos on your own.
 
-# This is a beta plugin. See: https://github.com/hashbite/gastby-transformer-video/
+# This is a beta plugin. See: https://github.com/hashbite/gatsby-transformer-video/
 
 :warning: Converting videos might take a lot of time. Make sure to have an effective caching mechanism in place. See [caching](#caching)
 
@@ -17,7 +17,7 @@
 
 ## Usage example
 
-https://github.com/hashbite/gastby-transformer-video/tree/packages/example
+https://github.com/hashbite/gatsby-transformer-video/tree/packages/example
 
 ## Installation
 
@@ -101,7 +101,7 @@ module.exports = {
             extension: `mp4`,
             converter: function ({ ffmpegSession, videoStreamMetadata }) {
               // Example:
-              // https://github.com/hashbite/gastby-transformer-video/blob/packages/example/gatsby-config.js
+              // https://github.com/hashbite/gatsby-transformer-video/blob/packages/example/gatsby-config.js
             },
           },
         },
