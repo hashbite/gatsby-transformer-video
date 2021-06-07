@@ -14,12 +14,12 @@
   ],
   "author": "Benedikt Rötsch <opensource@hashbite.net>",
   "bugs": {
-    "url": "https://github.com/hashbite/gastby-transformer-video/issues"
+    "url": "https://github.com/hashbite/gatsby-transformer-video/issues"
   },
-  "homepage": "https://github.com/hashbite/gastby-transformer-video/",
+  "homepage": "https://github.com/hashbite/gatsby-transformer-video/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hashbite/gastby-transformer-video.git",
+    "url": "https://github.com/hashbite/gatsby-transformer-video.git",
     "directory": "packages/gatsby-transformer-video"
   },
   "publishConfig": {
