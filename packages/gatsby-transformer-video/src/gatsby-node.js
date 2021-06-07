@@ -9,6 +9,8 @@ import FFMPEG from './ffmpeg'
 
 import { libsInstalled, libsAlreadyDownloaded, downloadLibs } from './binaries'
 
+console.log({ dir: __dirname, pwd: process.cwd() })
+
 const platform = os.platform()
 const arch = os.arch()
 
@@ -73,6 +75,7 @@ exports.createResolvers = async (
   { createResolvers, store, getCache, createNodeId, actions: { createNode } },
   { ffmpegPath, ffprobePath, downloadBinaries = true, profiles = {} }
 ) => {
+  console.log('createResolvers called')
   const program = store.getState().program
   const rootDir = program.directory
   const cacheDirOriginal = resolve(rootDir, CACHE_FOLDER_VIDEOS, `original`)
@@ -306,6 +309,8 @@ exports.createResolvers = async (
         }),
     },
   }
+
+  console.log({ videoFields })
 
   const resolvers = {
     ContentfulAsset: videoFields,
