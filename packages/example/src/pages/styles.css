@@ -1,3 +1,5 @@
+@import "modern-normalize/modern-normalize.css";
+
 body {
   font-family: sans-serif;
 }
@@ -9,21 +11,28 @@ video {
   height: auto;
 }
 
+main {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
 .grid {
   display: flex;
   flex-wrap: wrap;
 }
 
 .grid > * {
-  flex: 0 1 420px;
-  padding: 10px;
+  margin: 0 auto;
+  flex: 0 1 600px;
   overflow: hidden;
 }
 
 .screenshots {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 .screenshots > * {
-  flex: 0 1 30%;
+  flex: 0 1 48%;
+  margin-bottom: 1rem;
 }
