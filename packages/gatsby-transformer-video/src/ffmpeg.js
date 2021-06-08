@@ -182,7 +182,7 @@ export default class FFMPEG {
   takeScreenshots = async (
     video,
     fieldArgs,
-    { getCache, createNode, createNodeId }
+    { getCache, createNode, createNodeId, cache, getNode }
   ) => {
     const { type } = video.internal
     let contentDigest = video.internal.contentDigest
@@ -221,18 +221,39 @@ export default class FFMPEG {
     }
 
     const { timestamps, width } = fieldArgs
-
     const name = video.internal.contentDigest
-
     const tmpDir = resolve(tmpdir(), `gatsby-transformer-video`, name)
+    const screenshotsConfig = {
+      timestamps,
+      filename: `${contentDigest}-%ss.png`,
+      folder: tmpDir,
+      size: `${width}x?`,
+    }
+
+    // Restore from cache if possible
+    const cacheKey = createContentDigest(screenshotsConfig)
+    const cachedScreenshotIds = await cache.get(cacheKey)
+    console.log({ cacheKey, cachedScreenshotIds })
+    if (Array.isArray(cachedScreenshotIds)) {
+      const cachedScreenshots = cachedScreenshotIds.map(
+        (id) => console.log({ id }) || getNode(id)
+      )
+      // For some reasons, the screenshot nodes are available in GraphiQL but not available alls nodes :(
+      console.log({ cachedScreenshots })
+
+      if (cachedScreenshots.every((node) => typeof node !== 'undefined')) {
+        return cachedScreenshots
+      }
+    }
+
+    //@todo check how it behaves with the preserve file cache flag
 
     await ensureDir(tmpDir)
 
     let screenshotRawNames
-
     await new Promise((resolve, reject) => {
       ffmpeg(path)
-        .on(`filenames`, function (filenames) {
+        .on(`filenames`, function(filenames) {
           screenshotRawNames = filenames
           reporter.info(
             `${name} - Taking ${filenames.length} ${width}px screenshots`
@@ -246,12 +267,7 @@ export default class FFMPEG {
         .on(`end`, () => {
           resolve()
         })
-        .screenshots({
-          timestamps,
-          filename: `${contentDigest}-%ss.png`,
-          folder: tmpDir,
-          size: `${width}x?`,
-        })
+        .screenshots(screenshotsConfig)
     })
 
     const screenshotNodes = []
@@ -296,7 +312,12 @@ export default class FFMPEG {
       }
     }
 
+    // Cleanup
     await remove(tmpDir)
+
+    // Store to cache
+    const screenshotIds = screenshotNodes.map(({ id }) => id)
+    await cache.set(cacheKey, screenshotIds)
 
     return screenshotNodes
   }

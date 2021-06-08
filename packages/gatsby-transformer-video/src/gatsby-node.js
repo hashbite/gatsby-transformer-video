@@ -70,7 +70,16 @@ exports.createSchemaCustomization = ({ actions, schema }) => {
 }
 
 exports.createResolvers = async (
-  { createResolvers, store, getCache, createNodeId, actions: { createNode } },
+  {
+    createResolvers,
+    store,
+    getCache,
+    cache,
+    createNodeId,
+    getNode,
+    getNodes,
+    actions: { createNode },
+  },
   { ffmpegPath, ffprobePath, downloadBinaries = true, profiles = {} }
 ) => {
   const program = store.getState().program
@@ -298,12 +307,17 @@ exports.createResolvers = async (
         timestamps: { type: [GraphQLString], defaultValue: [`0`] },
         width: { type: GraphQLInt, defaultValue: 600 },
       },
-      resolve: (video, fieldArgs) =>
-        ffmpeg.queueTakeScreenshots(video, fieldArgs, {
+      resolve: async (video, fieldArgs) => {
+        const allNodes = await getNodes()
+        console.log(allNodes)
+        return ffmpeg.queueTakeScreenshots(video, fieldArgs, {
+          cache,
+          getNode,
           getCache,
           createNode,
           createNodeId,
-        }),
+        })
+      },
     },
   }
 
