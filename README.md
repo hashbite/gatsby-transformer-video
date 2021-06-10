@@ -22,7 +22,7 @@
 
 ## Usage example
 
-https://github.com/hashbite/gatsby-transformer-video/tree/packages/example
+https://github.com/hashbite/gatsby-transformer-video/tree/main/packages/example
 
 ## Installation
 

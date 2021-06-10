@@ -1,5 +1,11 @@
 #### 0.2.0 (2020-11-02)
 
+## 0.3.1
+
+### Patch Changes
+
+- Update readme, and add license and code of conduct
+
 ## 0.3.0
 
 ### Minor Changes
