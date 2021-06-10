@@ -6,7 +6,7 @@
   "scripts": {
     "build": "babel src --out-dir . --ignore **/__tests__",
     "watch": "babel -w src --out-dir . --ignore **/__tests__",
-    "prepare": "cp -f ../../README.md . && cross-env NODE_ENV=production npm run build"
+    "prepare": "cp -f ../../README.md . && cp -f ../../LICENSE . && cross-env NODE_ENV=production npm run build"
   },
   "keywords": [
     "gatsby",
