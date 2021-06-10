@@ -2,9 +2,14 @@
 
 > Convert videos via FFMPEG. Easily convert & host **small** videos on your own.
 
-# This is a beta plugin. See: https://github.com/hashbite/gatsby-transformer-video/
+[![NPM Version Badge](https://badgen.net/npm/v/gatsby-transformer-video)](https://www.npmjs.com/package/gatsby-transformer-video)
+[![NPM Monthly Downloads Badge](https://badgen.net/npm/dm/gatsby-transformer-video)](https://www.npmjs.com/package/gatsby-transformer-video)
+[![Github Check Badge](https://badgen.net/github/checks/hashbite/gatsby-transformer-video/main)](https://github.com/hashbite/gatsby-transformer-video/actions)
+[![License Badge](https://badgen.net/npm/license/gatsby-transformer-video)](https://github.com/hashbite/gatsby-transformer-video/blob/main/LICENSE)
 
-:warning: Converting videos might take a lot of time. Make sure to have an effective caching mechanism in place. See [caching](#caching)
+**This is a beta plugin and supports Gatsby v2 and v3. The videos will work fine on your website, but the implementation code still needs some love.**
+
+:warning::warning::warning: Converting videos might take a lot of time. Make sure to have an effective caching mechanism in place. See [caching](#caching)
 
 ## Features
 
@@ -27,7 +32,7 @@ npm i gatsby-transformer-video
 
 ## Prerequisites
 
-To properly convert and analyze videos, this relies on `ffmpeg` and `ffprobe`. These will be **downloaded automatically** except you turn it off via configuration.
+To properly convert and analyze videos, this relies on `ffmpeg` and `ffprobe`. If these are not available for your node process, they will be **downloaded automatically**.
 
 If you want to use your own version of `ffmpeg` and `ffprobe`, it should be compiled with at least the following flags enabled:
 
@@ -62,11 +67,15 @@ brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-fdk-aac --with-webp
 
 ## Usage
 
-`gatsby-config.js`:
+### config @ `gatsby-config.js`
+
+The plugin works fine in most cases without any configuration options set.
+
+Here is a full list of available, optional, options:
 
 ```js
-const { resolve } = require(`path`);
-const { platform } = require(`os`);
+const { resolve } = require(`path`)
+const { platform } = require(`os`)
 module.exports = {
   plugins: [
     {
@@ -92,14 +101,14 @@ module.exports = {
          *
          * Default: null
          */
-        ffmpegPath: resolve(__dirname, "bin", platform(), "ffmpeg"),
-        ffprobePath: resolve(__dirname, "bin", platform(), "ffprobe"),
+        ffmpegPath: resolve(__dirname, 'bin', platform(), 'ffmpeg'),
+        ffprobePath: resolve(__dirname, 'bin', platform(), 'ffprobe'),
 
         // Optional profiles for full fluent-ffmpeg access
         profiles: {
           sepia: {
             extension: `mp4`,
-            converter: function ({ ffmpegSession, videoStreamMetadata }) {
+            converter: function({ ffmpegSession, videoStreamMetadata }) {
               // Example:
               // https://github.com/hashbite/gatsby-transformer-video/blob/packages/example/gatsby-config.js
             },
@@ -108,8 +117,10 @@ module.exports = {
       },
     },
   ],
-};
+}
 ```
+
+### GraphQL Query
 
 ```graphql
 query {
@@ -156,11 +167,18 @@ query {
 }
 ```
 
+### Rendering
+
+- Pain implementation: https://github.com/hashbite/gatsby-transformer-video/blob/main/packages/example/src/pages/index.js
+- We plan to prove a component for this: https://github.com/hashbite/gatsby-transformer-video/issues/8
+
 ## Caching
 
 Generating videos take time. A lot. You should cache your results. Otherwise, you might not even be able to publish on your hosting platform.
 
 This plugin stores all converted files in `node_modules/.cache/gatsby-transformer-video/`
+
+[We plan to improve the caching behavior](https://github.com/hashbite/gatsby-transformer-video/issues/6)
 
 Here is a list of plugins that can help you:
 
