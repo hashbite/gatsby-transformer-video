@@ -30,17 +30,20 @@
     "command-exists": "^1.2.9",
     "execa": "^5.1.1",
     "fluent-ffmpeg": "^2.1.2",
-    "fs-extra": "^9.0.0",
-    "gatsby-plugin-sharp": "^3.6.0",
+    "fs-extra": "^10.0.0",
+    "gatsby-plugin-sharp": "^4.1.0",
     "imagemin": "^7.0.1",
     "imagemin-giflossy": "^5.1.10",
     "imagemin-mozjpeg": "^9.0.0",
     "p-queue": "^6.6.2"
   },
   "devDependencies": {
-    "@babel/cli": "^7.12.1",
-    "@babel/core": "^7.12.3",
-    "babel-preset-gatsby-package": "1.6.0",
+    "@babel/cli": "^7.16.0",
+    "@babel/core": "^7.16.0",
+    "babel-preset-gatsby-package": "2.1.0",
     "cross-env": "^7.0.2"
+  },
+  "peerDependencies": {
+    "gatsby": "^3.12.0 || ^4.0.0"
   }
 }
