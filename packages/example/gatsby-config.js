@@ -39,5 +39,6 @@ module.exports = {
         },
       },
     },
+    `gatsby-plugin-gatsby-cloud`,
   ],
 }
