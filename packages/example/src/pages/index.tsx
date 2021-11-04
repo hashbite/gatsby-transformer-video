@@ -1,11 +1,10 @@
-import React from "react";
-import { graphql } from "gatsby";
+import React from 'react'
+import { graphql } from 'gatsby'
 
-import "./styles.css";
+import './styles.css'
 
 function Video({
   video: {
-    name,
     videoH264,
     videoH265,
     videoVP9,
@@ -19,9 +18,6 @@ function Video({
 }) {
   return (
     <div {...props}>
-      <h2>
-        Example Video: {name.substring(0, 1).toUpperCase() + name.substring(1)}
-      </h2>
       <h3>Screenshots at 0s, 1s, 50% and 99%:</h3>
       <div className="screenshots">
         {videoScreenshots.map(({ publicURL }) => (
@@ -64,59 +60,84 @@ function Video({
         <source src={videoSepia.path} type="video/mp4; codecs=avc1" />
       </video>
     </div>
-  );
+  )
 }
 
 const Index = ({ data }) => {
-  const videos = data.allFile.edges.map(({ node }) => node);
-
   return (
     <main>
       <h1>Using gatsby-transformer-video</h1>
       <div className="grid">
-        {videos.map((video) => (
-          <Video key={video.id} video={video} />
-        ))}
+        <div>
+          <h2>Via gatsby-source-filesystem</h2>
+          <Video video={data.file} />
+        </div>
+        <div>
+          <h2>Via gatsby-source-contentful</h2>
+          <Video video={data.contentfulAsset} />
+        </div>
       </div>
     </main>
-  );
-};
+  )
+}
 
-export default Index;
+export default Index
 
 export const query = graphql`
   query HomePageQuery {
-    allFile {
-      edges {
-        node {
-          id
-          name
-          videoH264 {
-            path
-          }
-          videoH265 {
-            path
-          }
-          videoVP9 {
-            path
-          }
-          videoSepia: videoProfile(profile: "sepia", maxWidth: 600) {
-            path
-          }
-          previewH264: videoH264(maxWidth: 600, fps: 4, duration: 2) {
-            path
-          }
-          previewWebP: videoWebP(maxWidth: 600, fps: 4, duration: 2) {
-            path
-          }
-          previewGif: videoGif(maxWidth: 600, fps: 4, duration: 2) {
-            path
-          }
-          videoScreenshots(timestamps: ["0", "1", "50%", "99%"]) {
-            publicURL
-          }
-        }
+    file(relativePath: { eq: "gatsby.mp4" }) {
+      id
+      videoH264 {
+        path
+      }
+      videoH265 {
+        path
+      }
+      videoVP9 {
+        path
+      }
+      videoSepia: videoProfile(profile: "sepia", maxWidth: 600) {
+        path
+      }
+      previewH264: videoH264(maxWidth: 600, fps: 4, duration: 2) {
+        path
+      }
+      previewWebP: videoWebP(maxWidth: 600, fps: 4, duration: 2) {
+        path
+      }
+      previewGif: videoGif(maxWidth: 600, fps: 4, duration: 2) {
+        path
+      }
+      videoScreenshots(timestamps: ["0", "1", "50%", "99%"]) {
+        publicURL
+      }
+    }
+    contentfulAsset(contentful_id: { eq: "6HqTq5U2PLoVO0Qo7Vy0Yk" }) {
+      id
+      videoH264 {
+        path
+      }
+      videoH265 {
+        path
+      }
+      videoVP9 {
+        path
+      }
+      videoSepia: videoProfile(profile: "sepia", maxWidth: 600) {
+        path
+      }
+      previewH264: videoH264(maxWidth: 600, fps: 4, duration: 2) {
+        path
+      }
+      previewWebP: videoWebP(maxWidth: 600, fps: 4, duration: 2) {
+        path
+      }
+      previewGif: videoGif(maxWidth: 600, fps: 4, duration: 2) {
+        path
+      }
+      videoScreenshots(timestamps: ["0", "1", "50%", "99%"]) {
+        publicURL
       }
     }
   }
-`;
+`

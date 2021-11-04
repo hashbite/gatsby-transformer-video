@@ -7,6 +7,8 @@
   "dependencies": {
     "gatsby": "4.1.0",
     "gatsby-plugin-gatsby-cloud": "^4.1.0",
+    "gatsby-plugin-image": "^2.1.0",
+    "gatsby-source-contentful": "^6.1.0",
     "gatsby-source-filesystem": "4.1.0",
     "gatsby-transformer-video": "0.3.1",
     "modern-normalize": "^1.1.0",
