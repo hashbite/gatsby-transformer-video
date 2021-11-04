@@ -182,7 +182,7 @@ export default class FFMPEG {
   takeScreenshots = async (
     video,
     fieldArgs,
-    { getCache, createNode, createNodeId }
+    { getCache, createNode, createNodeId, cache, getNode }
   ) => {
     const { type } = video.internal
     let contentDigest = video.internal.contentDigest
@@ -221,18 +221,34 @@ export default class FFMPEG {
     }
 
     const { timestamps, width } = fieldArgs
-
     const name = video.internal.contentDigest
-
     const tmpDir = resolve(tmpdir(), `gatsby-transformer-video`, name)
+    const screenshotsConfig = {
+      timestamps,
+      filename: `${contentDigest}-%ss.png`,
+      folder: tmpDir,
+      size: `${width}x?`,
+    }
+
+    // Restore from cache if possible
+    const cacheKey = `screenshots-${createContentDigest(screenshotsConfig)}`
+    const cachedScreenshotIds = await cache.get(cacheKey)
+
+    if (Array.isArray(cachedScreenshotIds)) {
+      const cachedScreenshots = cachedScreenshotIds.map((id) => getNode(id))
+
+      if (cachedScreenshots.every((node) => typeof node !== 'undefined')) {
+        reporter.verbose(`Returning cached screenshots`)
+        return cachedScreenshots
+      }
+    }
 
     await ensureDir(tmpDir)
 
     let screenshotRawNames
-
     await new Promise((resolve, reject) => {
       ffmpeg(path)
-        .on(`filenames`, function (filenames) {
+        .on(`filenames`, function(filenames) {
           screenshotRawNames = filenames
           reporter.info(
             `${name} - Taking ${filenames.length} ${width}px screenshots`
@@ -246,12 +262,7 @@ export default class FFMPEG {
         .on(`end`, () => {
           resolve()
         })
-        .screenshots({
-          timestamps,
-          filename: `${contentDigest}-%ss.png`,
-          folder: tmpDir,
-          size: `${width}x?`,
-        })
+        .screenshots(screenshotsConfig)
     })
 
     const screenshotNodes = []
@@ -283,9 +294,10 @@ export default class FFMPEG {
           ext: `.jpg`,
           name,
           buffer: optimizedBuffer,
-          getCache,
+          cache,
           createNode,
           createNodeId,
+          parentNodeId: video.id,
         })
 
         screenshotNodes.push(node)
@@ -296,7 +308,12 @@ export default class FFMPEG {
       }
     }
 
+    // Cleanup
     await remove(tmpDir)
+
+    // Store to cache
+    const screenshotIds = screenshotNodes.map(({ id }) => id)
+    await cache.set(cacheKey, screenshotIds)
 
     return screenshotNodes
   }
