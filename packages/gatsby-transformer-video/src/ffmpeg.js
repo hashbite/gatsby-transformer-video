@@ -231,22 +231,17 @@ export default class FFMPEG {
     }
 
     // Restore from cache if possible
-    const cacheKey = createContentDigest(screenshotsConfig)
+    const cacheKey = `screenshots-${createContentDigest(screenshotsConfig)}`
     const cachedScreenshotIds = await cache.get(cacheKey)
-    console.log({ cacheKey, cachedScreenshotIds })
+
     if (Array.isArray(cachedScreenshotIds)) {
-      const cachedScreenshots = cachedScreenshotIds.map(
-        (id) => console.log({ id }) || getNode(id)
-      )
-      // For some reasons, the screenshot nodes are available in GraphiQL but not available alls nodes :(
-      console.log({ cachedScreenshots })
+      const cachedScreenshots = cachedScreenshotIds.map((id) => getNode(id))
 
       if (cachedScreenshots.every((node) => typeof node !== 'undefined')) {
+        reporter.verbose(`Returning cached screenshots`)
         return cachedScreenshots
       }
     }
-
-    //@todo check how it behaves with the preserve file cache flag
 
     await ensureDir(tmpDir)
 
@@ -299,9 +294,10 @@ export default class FFMPEG {
           ext: `.jpg`,
           name,
           buffer: optimizedBuffer,
-          getCache,
+          cache,
           createNode,
           createNodeId,
+          parentNodeId: video.id,
         })
 
         screenshotNodes.push(node)

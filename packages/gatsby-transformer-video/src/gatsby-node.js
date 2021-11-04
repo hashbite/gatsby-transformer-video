@@ -308,8 +308,6 @@ exports.createResolvers = async (
         width: { type: GraphQLInt, defaultValue: 600 },
       },
       resolve: async (video, fieldArgs) => {
-        const allNodes = await getNodes()
-        console.log(allNodes)
         return ffmpeg.queueTakeScreenshots(video, fieldArgs, {
           cache,
           getNode,
