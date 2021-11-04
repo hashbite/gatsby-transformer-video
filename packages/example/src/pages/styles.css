@@ -1,7 +1,8 @@
-@import "modern-normalize/modern-normalize.css";
+@import 'modern-normalize/modern-normalize.css';
 
 body {
   font-family: sans-serif;
+  padding: 1rem;
 }
 
 picture,
@@ -12,18 +13,19 @@ video {
 }
 
 main {
-  max-width: 600px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
 .grid {
   display: flex;
   flex-wrap: wrap;
+  gap: 2rem;
 }
 
 .grid > * {
   margin: 0 auto;
-  flex: 0 1 600px;
+  flex: 1 9 300px;
   overflow: hidden;
 }
 
