@@ -17,7 +17,6 @@
   "main": "n/a",
   "scripts": {
     "develop": "gatsby develop",
-    "build": "gatsby build",
-    "postinstall": "cd ../gatsby-transformer-video && npm run build && cd ../example"
+    "build": "gatsby build"
   }
 }
