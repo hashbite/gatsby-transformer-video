@@ -18,6 +18,6 @@
   "scripts": {
     "develop": "gatsby develop",
     "build": "gatsby build",
-    "prebuild": "cd ../gatsby-transformer-video && npm run build && cd ../example"
+    "postinstall": "cd ../gatsby-transformer-video && npm run build && cd ../example"
   }
 }
