@@ -4,7 +4,12 @@ import { tmpdir } from 'os'
 
 import { createContentDigest } from 'gatsby-core-utils'
 import { pathExists, stat, copy, ensureDir, remove, access } from 'fs-extra'
-import ffmpeg from 'fluent-ffmpeg'
+import ffmpeg, {
+  FfmpegCommand,
+  FfprobeStream,
+  FfprobeData,
+  ScreenshotsConfig,
+} from 'fluent-ffmpeg'
 import imagemin from 'imagemin'
 import imageminGiflossy from 'imagemin-giflossy'
 import imageminMozjpeg from 'imagemin-mozjpeg'
@@ -20,8 +25,28 @@ import profileH265 from './profiles/h265'
 import profileVP9 from './profiles/vp9'
 import profileWebP from './profiles/webp'
 import profileGif from './profiles/gif'
+import {
+  DefaultTransformerFieldArgs,
+  DefaultProfileArgs,
+  VideoTransformerArgs,
+  VideoNode,
+  ConvertVideoArgs,
+  ScreenshotTransformerFieldArgs,
+  ScreenshotTransformerHelpers,
+  H264TransformerFieldArgs,
+  VP9TransformerFieldArgs,
+  H265TransformerFieldArgs,
+  VideoStreamMetadata,
+  ConvertVideoResult,
+} from './types'
 
 export default class FFMPEG {
+  queue: PQueue
+  cacheDirOriginal: string
+  cacheDirConverted: string
+  rootDir: string
+  profiles: unknown
+
   constructor({
     rootDir,
     cacheDirOriginal,
@@ -29,6 +54,13 @@ export default class FFMPEG {
     ffmpegPath,
     ffprobePath,
     profiles,
+  }: {
+    cacheDirOriginal: string
+    cacheDirConverted: string
+    rootDir: string
+    profiles: unknown
+    ffmpegPath: string
+    ffprobePath: string
   }) {
     this.queue = new PQueue({ concurrency: 1 })
     this.cacheDirOriginal = cacheDirOriginal
@@ -45,7 +77,7 @@ export default class FFMPEG {
   }
 
   // Execute FFPROBE and return metadata
-  executeFfprobe = (path) =>
+  executeFfprobe = (path: string) =>
     new Promise((resolve, reject) => {
       ffmpeg(path).ffprobe((err, data) => {
         if (err) reject(err)
@@ -54,13 +86,19 @@ export default class FFMPEG {
     })
 
   // Execute FFMMPEG and log progress
-  executeFfmpeg = async ({ ffmpegSession, cachePath }) => {
-    let startTime
+  executeFfmpeg = async ({
+    ffmpegSession,
+    cachePath,
+  }: {
+    ffmpegSession: ffmpeg.FfmpegCommand
+    cachePath: string
+  }) => {
+    let startTime: number
     let lastLoggedPercent = 0.1
 
     const { name } = parse(cachePath)
 
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       ffmpegSession
         .on(`start`, (commandLine) => {
           reporter.info(`${name} - converting`)
@@ -83,7 +121,7 @@ export default class FFMPEG {
           }
         })
         .on(`error`, (err, stdout, stderr) => {
-          reporter.info(`\n---\n`, stdout, stderr, `\n---\n`)
+          reporter.info(`\n---\n${stdout}\n\n${stderr}\n---\n`)
           reporter.info(`${name} - An error occurred:`)
           console.error(err)
           reject(err)
@@ -97,7 +135,15 @@ export default class FFMPEG {
   }
 
   // Analyze video and download if neccessary
-  analyzeVideo = async ({ video, fieldArgs, type }) => {
+  analyzeVideo = async ({
+    video,
+    fieldArgs,
+    type,
+  }: {
+    video: VideoNode
+    fieldArgs: DefaultTransformerFieldArgs
+    type: string
+  }) => {
     let path
     let contentDigest = video.internal.contentDigest
 
@@ -132,26 +178,36 @@ export default class FFMPEG {
   }
 
   // Queue video for conversion
-  queueConvertVideo = async (...args) =>
-    this.queue.add(() => this.convertVideo(...args))
+  // @stephan
+  queueConvertVideo = async <T extends DefaultTransformerFieldArgs>(
+    videoConversionData: ConvertVideoArgs<T>
+  ) => this.queue.add(() => this.convertVideo(videoConversionData))
 
   // Converts a video based on a given profile, populates cache and public dir
-  convertVideo = async ({
+  convertVideo = async <T extends DefaultTransformerFieldArgs>({
     profile,
     sourcePath,
     cachePath,
     publicPath,
     fieldArgs,
     info,
-  }) => {
+  }: ConvertVideoArgs<T>): Promise<ConvertVideoResult> => {
     const alreadyExists = await pathExists(cachePath)
 
     if (!alreadyExists) {
-      const ffmpegSession = ffmpeg().input(sourcePath)
-      const filters = this.createFilters({ fieldArgs, info }).join(`,`)
+      const ffmpegSession: FfmpegCommand = ffmpeg().input(sourcePath)
+      const filters = this.createFilters({
+        fieldArgs,
+        info,
+      })
       const videoStreamMetadata = this.parseVideoStream(info.streams)
 
-      profile({ ffmpegSession, filters, fieldArgs, videoStreamMetadata })
+      profile({
+        ffmpegSession,
+        filters,
+        fieldArgs,
+        videoStreamMetadata,
+      })
 
       this.enhanceFfmpegForFilters({ ffmpegSession, fieldArgs })
       await this.executeFfmpeg({ ffmpegSession, cachePath })
@@ -176,13 +232,22 @@ export default class FFMPEG {
   }
 
   // Queue take screenshots
-  queueTakeScreenshots = (...args) =>
-    this.queue.add(() => this.takeScreenshots(...args))
+  queueTakeScreenshots = (
+    video: VideoNode,
+    fieldArgs: ScreenshotTransformerFieldArgs,
+    helpers: ScreenshotTransformerHelpers
+  ) => this.queue.add(() => this.takeScreenshots(video, fieldArgs, helpers))
 
   takeScreenshots = async (
-    video,
-    fieldArgs,
-    { getCache, createNode, createNodeId, cache, getNode }
+    video: VideoNode,
+    fieldArgs: ScreenshotTransformerFieldArgs,
+    {
+      createNode,
+      createNodeId,
+      cache,
+      getNode,
+      store,
+    }: ScreenshotTransformerHelpers
   ) => {
     const { type } = video.internal
     let contentDigest = video.internal.contentDigest
@@ -197,11 +262,11 @@ export default class FFMPEG {
     }
 
     // Resolve videos only
-    if (fileType.indexOf(`video/`) === -1) {
+    if (!fileType || fileType.indexOf(`video/`) === -1) {
       return null
     }
 
-    let path
+    let path: string
 
     if (type === `File`) {
       path = video.absolutePath
@@ -223,7 +288,7 @@ export default class FFMPEG {
     const { timestamps, width } = fieldArgs
     const name = video.internal.contentDigest
     const tmpDir = resolve(tmpdir(), `gatsby-transformer-video`, name)
-    const screenshotsConfig = {
+    const screenshotsConfig: ScreenshotsConfig = {
       timestamps,
       filename: `${contentDigest}-%ss.png`,
       folder: tmpDir,
@@ -245,25 +310,27 @@ export default class FFMPEG {
 
     await ensureDir(tmpDir)
 
-    let screenshotRawNames
-    await new Promise((resolve, reject) => {
-      ffmpeg(path)
-        .on(`filenames`, function(filenames) {
-          screenshotRawNames = filenames
-          reporter.info(
-            `${name} - Taking ${filenames.length} ${width}px screenshots`
-          )
-        })
-        .on(`error`, (err, stdout, stderr) => {
-          reporter.info(`${name} - Failed to take ${width}px screenshots:`)
-          console.error(err)
-          reject(err)
-        })
-        .on(`end`, () => {
-          resolve()
-        })
-        .screenshots(screenshotsConfig)
-    })
+    const screenshotRawNames = await new Promise<string[]>(
+      (resolve, reject) => {
+        let paths: string[]
+        ffmpeg(path)
+          .on(`filenames`, function(filenames) {
+            paths = filenames
+            reporter.info(
+              `${name} - Taking ${filenames.length} ${width}px screenshots`
+            )
+          })
+          .on(`error`, (err, stdout, stderr) => {
+            reporter.info(`${name} - Failed to take ${width}px screenshots:`)
+            console.error(err)
+            reject(err)
+          })
+          .on(`end`, () => {
+            resolve(paths)
+          })
+          .screenshots(screenshotsConfig)
+      }
+    )
 
     const screenshotNodes = []
 
@@ -295,6 +362,7 @@ export default class FFMPEG {
           name,
           buffer: optimizedBuffer,
           cache,
+          store,
           createNode,
           createNodeId,
           parentNodeId: video.id,
@@ -318,41 +386,54 @@ export default class FFMPEG {
     return screenshotNodes
   }
 
-  createFromProfile = async ({ publicDir, path, name, fieldArgs, info }) => {
-    const profileName = fieldArgs.profile
-    const profile = this.profiles[profileName]
+  // Transformer:
+  // createFromProfile = async ({
+  //   publicDir,
+  //   path,
+  //   name,
+  //   fieldArgs,
+  //   info,
+  // }: VideoTransformerArgs<any>) => {
+  //   const profileName = fieldArgs.profile
+  //   const profile = this.profiles[profileName]
 
-    if (!profile) {
-      throw new Error(`Unable to locate FFMPEG profile ${profileName}`)
-    }
+  //   if (!profile) {
+  //     throw new Error(`Unable to locate FFMPEG profile ${profileName}`)
+  //   }
 
-    if (!profile.extension) {
-      throw new Error(
-        `FFMPEG profile ${profileName} has no extension specified`
-      )
-    }
+  //   if (!profile.extension) {
+  //     throw new Error(
+  //       `FFMPEG profile ${profileName} has no extension specified`
+  //     )
+  //   }
 
-    if (!profile.converter) {
-      throw new Error(
-        `FFMPEG profile ${profileName} has no converter function specified`
-      )
-    }
+  //   if (!profile.converter) {
+  //     throw new Error(
+  //       `FFMPEG profile ${profileName} has no converter function specified`
+  //     )
+  //   }
 
-    const filename = `${name}-${profileName}.${profile.extension}`
-    const cachePath = resolve(this.cacheDirConverted, filename)
-    const publicPath = resolve(publicDir, filename)
+  //   const filename = `${name}-${profileName}.${profile.extension}`
+  //   const cachePath = resolve(this.cacheDirConverted, filename)
+  //   const publicPath = resolve(publicDir, filename)
 
-    return this.queueConvertVideo({
-      profile: profile.converter,
-      sourcePath: path,
-      cachePath,
-      publicPath,
-      fieldArgs,
-      info,
-    })
-  }
+  //   return this.queueConvertVideo({
+  //     profile: profile.converter,
+  //     sourcePath: path,
+  //     cachePath,
+  //     publicPath,
+  //     fieldArgs,
+  //     info,
+  //   })
+  // }
 
-  createH264 = async ({ publicDir, path, name, fieldArgs, info }) => {
+  createH264 = async ({
+    publicDir,
+    path,
+    name,
+    fieldArgs,
+    info,
+  }: VideoTransformerArgs<H264TransformerFieldArgs>) => {
     const filename = `${name}-h264.mp4`
     const cachePath = resolve(this.cacheDirConverted, filename)
     const publicPath = resolve(publicDir, filename)
@@ -367,7 +448,13 @@ export default class FFMPEG {
     })
   }
 
-  createH265 = async ({ publicDir, path, name, fieldArgs, info }) => {
+  createH265 = async ({
+    publicDir,
+    path,
+    name,
+    fieldArgs,
+    info,
+  }: VideoTransformerArgs<H265TransformerFieldArgs>) => {
     const filename = `${name}-h265.mp4`
     const cachePath = resolve(this.cacheDirConverted, filename)
     const publicPath = resolve(publicDir, filename)
@@ -382,7 +469,13 @@ export default class FFMPEG {
     })
   }
 
-  createVP9 = async ({ publicDir, path, name, fieldArgs, info }) => {
+  createVP9 = async ({
+    publicDir,
+    path,
+    name,
+    fieldArgs,
+    info,
+  }: VideoTransformerArgs<VP9TransformerFieldArgs>) => {
     const filename = `${name}-vp9.webm`
     const cachePath = resolve(this.cacheDirConverted, filename)
     const publicPath = resolve(publicDir, filename)
@@ -397,7 +490,13 @@ export default class FFMPEG {
     })
   }
 
-  createWebP = async ({ publicDir, path, name, fieldArgs, info }) => {
+  createWebP = async ({
+    publicDir,
+    path,
+    name,
+    fieldArgs,
+    info,
+  }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
     const filename = `${name}-webp.webp`
     const cachePath = resolve(this.cacheDirConverted, filename)
     const publicPath = resolve(publicDir, filename)
@@ -412,7 +511,13 @@ export default class FFMPEG {
     })
   }
 
-  createGif = async ({ publicDir, path, name, fieldArgs, info }) => {
+  createGif = async ({
+    publicDir,
+    path,
+    name,
+    fieldArgs,
+    info,
+  }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
     const filename = `${name}-gif.gif`
     const cachePath = resolve(this.cacheDirConverted, filename)
     const publicPath = resolve(publicDir, filename)
@@ -442,7 +547,13 @@ export default class FFMPEG {
   }
 
   // Generate ffmpeg filters based on field args
-  createFilters = ({ fieldArgs, info }) => {
+  createFilters = <T extends DefaultTransformerFieldArgs>({
+    fieldArgs,
+    info,
+  }: {
+    fieldArgs: T
+    info: FfprobeData
+  }): string[] => {
     const {
       maxWidth,
       maxHeight,
@@ -457,8 +568,10 @@ export default class FFMPEG {
     const filters = []
     const { duration: sourceDuration } = info.streams[0]
 
-    if (duration) {
-      filters.push(`setpts=${(duration / sourceDuration).toFixed(6)}*PTS`)
+    if (duration && sourceDuration) {
+      filters.push(
+        `setpts=${(duration / parseInt(sourceDuration)).toFixed(6)}*PTS`
+      )
     }
 
     if (fps) {
@@ -466,7 +579,12 @@ export default class FFMPEG {
     }
 
     if (maxWidth || maxHeight) {
-      filters.push(`scale=${this.generateScaleFilter({ maxWidth, maxHeight })}`)
+      filters.push(
+        `scale=${this.generateScaleFilter({
+          maxWidth,
+          maxHeight,
+        })}`
+      )
     }
 
     if (saturation !== 1) {
@@ -479,7 +597,7 @@ export default class FFMPEG {
       let y = overlayY === undefined ? `center` : overlayY
 
       if (x === `start`) {
-        x = padding
+        x = padding.toString()
       }
       if (x === `center`) {
         x = `(main_w-overlay_w)/2`
@@ -489,7 +607,7 @@ export default class FFMPEG {
       }
 
       if (y === `start`) {
-        y = padding
+        y = padding.toString()
       }
       if (y === `center`) {
         y = `(main_h-overlay_h)/2`
@@ -505,9 +623,12 @@ export default class FFMPEG {
   }
 
   // Apply required changes from some filters to the fluent-ffmpeg session
-  enhanceFfmpegForFilters = ({
+  enhanceFfmpegForFilters = <T extends DefaultTransformerFieldArgs>({
     fieldArgs: { overlay, duration },
     ffmpegSession,
+  }: {
+    fieldArgs: T
+    ffmpegSession: FfmpegCommand
   }) => {
     if (duration) {
       ffmpegSession.duration(duration).noAudio()
@@ -519,7 +640,13 @@ export default class FFMPEG {
   }
 
   // Create scale filter based on given field args
-  generateScaleFilter({ maxWidth, maxHeight }) {
+  generateScaleFilter({
+    maxWidth,
+    maxHeight,
+  }: {
+    maxWidth: number
+    maxHeight: number
+  }) {
     if (!maxHeight) {
       return `'min(${maxWidth},iw)':-2:flags=lanczos`
     }
@@ -527,9 +654,11 @@ export default class FFMPEG {
   }
 
   // Locates video stream and returns metadata
-  parseVideoStream = (streams) => {
+  parseVideoStream = (streams: FfprobeStream[]): VideoStreamMetadata => {
     const videoStream = streams.find((stream) => stream.codec_type === `video`)
-
+    if (!videoStream?.r_frame_rate) {
+      throw new Error('Could not parse video')
+    }
     const currentFps = parseInt(videoStream.r_frame_rate.split(`/`)[0])
     return { videoStream, currentFps }
   }

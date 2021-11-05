@@ -1,9 +1,15 @@
+import { DefaultProfileArgs, H264TransformerFieldArgs } from '../types'
+
+interface H264ProfileArgs extends DefaultProfileArgs {
+  fieldArgs: H264TransformerFieldArgs
+}
+
 export default function profileH264({
   ffmpegSession,
   filters,
   fieldArgs,
   videoStreamMetadata,
-}) {
+}: H264ProfileArgs) {
   const { crf, preset, maxRate, bufSize, fps } = fieldArgs
   const { currentFps } = videoStreamMetadata
 
@@ -23,7 +29,7 @@ export default function profileH264({
   return (
     ffmpegSession
       .videoCodec(`libx264`)
-      .complexFilter([filters])
+      .complexFilter(filters)
       .outputOptions(outputOptions)
       .audioCodec(`aac`)
       .audioQuality(5)

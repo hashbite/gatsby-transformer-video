@@ -5,10 +5,13 @@ import { resolve, extname } from 'path'
 import PQueue from 'p-queue'
 import axios from 'axios'
 import reporter from 'gatsby-cli/lib/reporter'
+import { VideoNode } from './types'
 
 const downloadQueue = new PQueue({ concurrency: 3 })
 
-const downloadCache = {}
+const downloadCache = new Map()
+
+// @todo we can use it now!
 
 /**
  * Download and cache video from Contentful for further processing
@@ -18,7 +21,15 @@ const downloadCache = {}
  * Retry is currently broken: https://github.com/gatsbyjs/gatsby/issues/22010
  * Downloaded files are not cached properly: https://github.com/gatsbyjs/gatsby/issues/8324 & https://github.com/gatsbyjs/gatsby/pull/8379
  */
-export async function cacheContentfulVideo({ video, cacheDir, contentDigest }) {
+export async function cacheContentfulVideo({
+  video,
+  cacheDir,
+  contentDigest,
+}: {
+  video: VideoNode
+  cacheDir: string
+  contentDigest: string
+}) {
   const {
     file: { url, fileName },
   } = video
@@ -28,13 +39,13 @@ export async function cacheContentfulVideo({ video, cacheDir, contentDigest }) {
   try {
     await access(path, fs.constants.R_OK)
     reporter.verbose(`Cache hit: ${url}`)
-    downloadCache[url] = path
+    downloadCache.set(url, path)
 
-    return downloadCache[url]
+    return path
   } catch {
-    if (url in downloadCache) {
+    if (downloadCache.has(url)) {
       // Already in download queue
-      return downloadCache[url]
+      return downloadCache.get(url)
     }
 
     async function queuedDownload() {
@@ -74,7 +85,6 @@ export async function cacheContentfulVideo({ video, cacheDir, contentDigest }) {
             `Unable to download ${url}\n\nRetrying again after 1s (${tries}/3)`
           )
           console.error(e)
-          console.log(Object.keys(e), e.message)
           await new Promise((resolve) => setTimeout(resolve, 1000))
         }
       }
@@ -84,8 +94,8 @@ export async function cacheContentfulVideo({ video, cacheDir, contentDigest }) {
       return path
     }
 
-    downloadCache[url] = queuedDownload()
+    downloadCache.set(url, queuedDownload)
 
-    return downloadCache[url]
+    return queuedDownload
   }
 }
