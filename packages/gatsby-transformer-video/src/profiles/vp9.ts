@@ -1,15 +1,24 @@
-export default function profileVP9({
+import { VP9TransformerFieldArgs, Profile } from '../types'
+
+export const profileVP9: Profile<VP9TransformerFieldArgs> = ({
   ffmpegSession,
   filters,
   fieldArgs,
   videoStreamMetadata,
-}) {
-  const { crf, bitrate, minrate, maxrate, cpuUsed } = fieldArgs
+}) => {
+  const { crf, bitRate, minRate, maxRate, cpuUsed } = fieldArgs
   const { currentFps, videoStream } = videoStreamMetadata
 
   // Automatically determine fitting bitrates, based on:
   // https://developers.google.com/media/vp9/settings/vod/#bitrate
-  const bitrateMap = {
+
+  interface BitRate {
+    [key: number]: string[]
+  }
+  interface BitRateMap {
+    [key: number]: BitRate
+  }
+  const bitrateMap: BitRateMap = {
     240: {
       30: [`150k`, `75k`, `218k`],
     },
@@ -37,21 +46,28 @@ export default function profileVP9({
     },
   }
 
-  const dimensionMin = Math.min(videoStream.width, videoStream.height)
+  const dimensionMin = Math.min(videoStream.width || 0, videoStream.height || 0)
   const appliedFps = fieldArgs.fps || currentFps
 
-  const closestResolution = Object.keys(bitrateMap).reduce((prev, curr) =>
-    Math.abs(curr - dimensionMin) < Math.abs(prev - dimensionMin) ? curr : prev
+  const closestResolution = Object.keys(bitrateMap).reduce(
+    (prev, curr) =>
+      Math.abs(parseInt(curr) - dimensionMin) < Math.abs(prev - dimensionMin)
+        ? parseInt(curr)
+        : prev,
+    0
   )
 
   const closestFps = Object.keys(bitrateMap[closestResolution]).reduce(
     (prev, curr) =>
-      Math.abs(curr - appliedFps) < Math.abs(prev - appliedFps) ? curr : prev
+      Math.abs(parseInt(curr) - appliedFps) < Math.abs(prev - appliedFps)
+        ? parseInt(curr)
+        : prev,
+    0
   )
 
-  const appliedBitrate = bitrate || bitrateMap[closestResolution][closestFps][0]
-  const appliedMinrate = minrate || bitrateMap[closestResolution][closestFps][1]
-  const appliedMaxrate = maxrate || bitrateMap[closestResolution][closestFps][2]
+  const appliedBitrate = bitRate || bitrateMap[closestResolution][closestFps][0]
+  const appliedMinrate = minRate || bitrateMap[closestResolution][closestFps][1]
+  const appliedMaxrate = maxRate || bitrateMap[closestResolution][closestFps][2]
 
   const outputOptions = [
     crf && `-crf ${crf}`,
@@ -61,11 +77,13 @@ export default function profileVP9({
     `-cpu-used ${cpuUsed}`,
     `-g ${appliedFps * 8}`,
     `-pix_fmt yuv420p`,
-  ].filter(Boolean)
+  ]
+    .filter(Boolean)
+    .map((v) => v.toString())
 
   return ffmpegSession
     .videoCodec(`libvpx-vp9`)
-    .complexFilter([filters])
+    .complexFilter([filters.join()])
     .outputOptions(outputOptions)
     .audioCodec(`libopus`)
 }

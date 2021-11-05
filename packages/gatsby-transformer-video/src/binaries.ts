@@ -1,6 +1,6 @@
 import { resolve } from 'path'
 
-import execa from 'execa'
+import execa, { StdioOption } from 'execa'
 import { access, ensureDir } from 'fs-extra'
 import commandExists from 'command-exists'
 
@@ -16,16 +16,30 @@ export async function libsInstalled() {
   }
 }
 
-export async function libsAlreadyDownloaded({ binariesDir }) {
+export async function libsAlreadyDownloaded({
+  binariesDir,
+}: {
+  binariesDir: string
+}) {
   await access(resolve(binariesDir, `ffmpeg`))
   await access(resolve(binariesDir, `ffprobe`))
 }
 
-export async function downloadLibs({ binariesDir, platform }) {
-  const execaConfig = {
+export async function downloadLibs({
+  binariesDir,
+  platform,
+}: {
+  binariesDir: string
+  platform: string
+}) {
+  const execaConfig: {
+    cwd: string
+    stdout: StdioOption
+    stderr: StdioOption
+  } = {
     cwd: binariesDir,
-    stdout: `inherit`,
-    stderr: `inherit`,
+    stdout: 'inherit',
+    stderr: 'inherit',
   }
 
   await ensureDir(binariesDir)

@@ -1,4 +1,9 @@
-export default function profileWebP({ ffmpegSession, filters }) {
+import { DefaultTransformerFieldArgs, Profile } from '../types'
+
+export const profileWebP: Profile<DefaultTransformerFieldArgs> = ({
+  filters,
+  ffmpegSession,
+}) => {
   const outputOptions = [
     `-preset picture`,
     `-compression_level 6`,
@@ -7,7 +12,7 @@ export default function profileWebP({ ffmpegSession, filters }) {
 
   return ffmpegSession
     .videoCodec(`libwebp`)
-    .complexFilter([filters])
+    .complexFilter([filters.join()])
     .outputOptions(outputOptions)
     .noAudio()
 }
