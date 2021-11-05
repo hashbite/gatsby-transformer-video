@@ -8,6 +8,22 @@ import reporter from 'gatsby-cli/lib/reporter'
 import FFMPEG from './ffmpeg'
 
 import { libsInstalled, libsAlreadyDownloaded, downloadLibs } from './binaries'
+import {
+  CreateResolversArgs,
+  CreateSchemaCustomizationArgs,
+  ParentSpanPluginArgs,
+} from 'gatsby'
+
+import { ObjectTypeComposerFieldConfigMapDefinition } from 'graphql-compose'
+
+import {
+  DefaultTransformerFieldArgs,
+  GatsbyTransformerVideoOptions,
+  VideoNode,
+  ScreenshotTransformerFieldArgs,
+  Transformer,
+} from './types'
+import { FfprobeData } from 'fluent-ffmpeg'
 
 const platform = os.platform()
 const arch = os.arch()
@@ -42,7 +58,10 @@ const DEFAULT_ARGS = {
   },
 }
 
-exports.createSchemaCustomization = ({ actions, schema }) => {
+exports.createSchemaCustomization = ({
+  actions,
+  schema,
+}: CreateSchemaCustomizationArgs) => {
   const { createTypes } = actions
 
   const typeDefs = [
@@ -77,10 +96,14 @@ exports.createResolvers = async (
     cache,
     createNodeId,
     getNode,
-    getNodes,
     actions: { createNode },
-  },
-  { ffmpegPath, ffprobePath, downloadBinaries = true, profiles = {} }
+  }: CreateResolversArgs,
+  {
+    ffmpegPath,
+    ffprobePath,
+    downloadBinaries = true,
+    profiles = {},
+  }: GatsbyTransformerVideoOptions
 ) => {
   const program = store.getState().program
   const rootDir = program.directory
@@ -116,7 +139,13 @@ exports.createResolvers = async (
   })
 
   // Get source videos metadata and download the file if required
-  async function prepareAndAnalyzeVideo({ video, fieldArgs }) {
+  async function prepareAndAnalyzeVideo({
+    video,
+    fieldArgs,
+  }: {
+    video: VideoNode
+    fieldArgs: DefaultTransformerFieldArgs
+  }) {
     const { type } = video.internal
 
     let fileType = null
@@ -164,9 +193,9 @@ exports.createResolvers = async (
   }
 
   // Analyze the resulting video and prepare field return values
-  async function processResult({ publicPath }) {
+  async function processResult({ publicPath }: { publicPath: string }) {
     try {
-      const result = await ffmpeg.executeFfprobe(publicPath)
+      const result: FfprobeData = await ffmpeg.executeFfprobe(publicPath)
 
       const {
         format_name: formatName,
@@ -178,6 +207,7 @@ exports.createResolvers = async (
       } = result.format
 
       const { width, height } = result.streams[0]
+      const aspectRatio = (width || 1) / (height || 1)
 
       const path = publicPath.replace(resolve(rootDir, `public`), ``)
 
@@ -190,13 +220,13 @@ exports.createResolvers = async (
         ext,
         formatName,
         formatLongName,
-        startTime: startTime === `N/A` ? null : startTime,
-        duration: duration === `N/A` ? null : duration,
-        size: size === `N/A` ? null : size,
-        bitRate: bitRate === `N/A` ? null : bitRate,
+        startTime: startTime || null,
+        duration: duration || null,
+        size: size || null,
+        bitRate: bitRate || null,
         width,
         height,
-        aspectRatio: width / height,
+        aspectRatio,
       }
     } catch (err) {
       reporter.error(`Unable to analyze video file: ${publicPath}`)
@@ -205,8 +235,12 @@ exports.createResolvers = async (
   }
 
   // Transform video with a given transformer & codec
-  function transformVideo({ transformer }) {
-    return async (video, fieldArgs) => {
+  function transformVideo<T extends DefaultTransformerFieldArgs>({
+    transformer,
+  }: {
+    transformer: Transformer<T>
+  }) {
+    return async (video: VideoNode, fieldArgs: T) => {
       try {
         const { publicDir, path, name, info } = await prepareAndAnalyzeVideo({
           video,
@@ -232,7 +266,7 @@ exports.createResolvers = async (
     }
   }
 
-  const videoFields = {
+  const videoFields: ObjectTypeComposerFieldConfigMapDefinition<any, any> = {
     videoH264: {
       type: `GatsbyVideo`,
       args: {
@@ -307,13 +341,17 @@ exports.createResolvers = async (
         timestamps: { type: [GraphQLString], defaultValue: [`0`] },
         width: { type: GraphQLInt, defaultValue: 600 },
       },
-      resolve: async (video, fieldArgs) => {
+      resolve: async (
+        video: VideoNode,
+        fieldArgs: ScreenshotTransformerFieldArgs
+      ) => {
         return ffmpeg.queueTakeScreenshots(video, fieldArgs, {
           cache,
           getNode,
           getCache,
           createNode,
           createNodeId,
+          store,
         })
       },
     },
@@ -326,7 +364,12 @@ exports.createResolvers = async (
   createResolvers(resolvers)
 }
 
-exports.onPreInit = async ({ store }, { downloadBinaries = true }) => {
+exports.onPreInit = async (
+  { store }: ParentSpanPluginArgs,
+  { downloadBinaries = true }
+) => {
+  console.log('Testing... FINDME')
+
   if (!downloadBinaries) {
     reporter.verbose(`Skipped download of FFMPEG & FFPROBE binaries`)
     return

@@ -1,9 +1,11 @@
-export default function profileH265({
+import { H265TransformerFieldArgs, Profile } from '../types'
+
+export const profileH265: Profile<H265TransformerFieldArgs> = ({
   ffmpegSession,
   filters,
   fieldArgs,
   videoStreamMetadata,
-}) {
+}) => {
   const { crf, preset, maxRate, bufSize, fps } = fieldArgs
   const { currentFps } = videoStreamMetadata
 
@@ -19,12 +21,14 @@ export default function profileH265({
     `-g ${Math.floor((fps || currentFps) / 2)}`,
     `-pix_fmt yuv420p`,
     `-tag:v hvc1`,
-  ].filter(Boolean)
+  ]
+    .filter(Boolean)
+    .map((v) => v.toString())
 
   return (
     ffmpegSession
       .videoCodec(`libx265`)
-      .complexFilter([filters])
+      .complexFilter([filters.join()])
       .outputOptions(outputOptions)
       .audioCodec(`aac`)
       .audioQuality(5)
