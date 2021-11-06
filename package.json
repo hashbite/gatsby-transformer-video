@@ -1,7 +1,9 @@
 {
   "private": true,
   "scripts": {
-    "postinstall": "cd packages/gatsby-transformer-video && npm run build"
+    "postinstall": "npm run build-plugin && npm run clean-example",
+    "build-plugin": "cd packages/gatsby-transformer-video && npm run build",
+    "clean-example": "cd packages/example && gatsby clean && rm -rf node_modules/.cache/gatsby-transformer-video"
   },
   "workspaces": [
     "packages/*"
