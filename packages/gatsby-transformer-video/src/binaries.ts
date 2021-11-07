@@ -1,7 +1,7 @@
 import commandExists from 'command-exists'
 import execa, { StdioOption } from 'execa'
 import { access, ensureDir } from 'fs-extra'
-import reporter from 'gatsby-cli/lib/reporter'
+import { NodePluginArgs } from 'gatsby'
 import { resolve } from 'path'
 
 export async function libsInstalled() {
@@ -23,13 +23,16 @@ export async function libsAlreadyDownloaded({
   await access(resolve(binariesDir, `ffprobe`))
 }
 
+interface DownloadLibsArgs extends Pick<NodePluginArgs, 'reporter'> {
+  binariesDir: string
+  platform: string
+}
+
 export async function downloadLibs({
   binariesDir,
   platform,
-}: {
-  binariesDir: string
-  platform: string
-}) {
+  reporter,
+}: DownloadLibsArgs) {
   const execaConfig: {
     cwd: string
     stdout: StdioOption

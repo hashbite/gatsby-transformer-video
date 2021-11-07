@@ -3,7 +3,6 @@ import { FfprobeData } from 'fluent-ffmpeg'
 import fs from 'fs'
 import { access, ensureDir } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
-import reporter from 'gatsby-cli/lib/reporter'
 import PQueue from 'p-queue'
 import { extname, parse, resolve } from 'path'
 
@@ -29,15 +28,18 @@ const downloadCache = new Map()
  * Retry is currently broken: https://github.com/gatsbyjs/gatsby/issues/22010
  * Downloaded files are not cached properly: https://github.com/gatsbyjs/gatsby/issues/8324 & https://github.com/gatsbyjs/gatsby/pull/8379
  */
+interface CacheContentfulVideoArgs extends Pick<NodePluginArgs, 'reporter'> {
+  video: VideoNode
+  cacheDir: string
+  contentDigest: string
+}
+
 export async function cacheContentfulVideo({
   video,
   cacheDir,
   contentDigest,
-}: {
-  video: VideoNode
-  cacheDir: string
-  contentDigest: string
-}) {
+  reporter,
+}: CacheContentfulVideoArgs) {
   const {
     file: { url, fileName },
   } = video
@@ -46,7 +48,7 @@ export async function cacheContentfulVideo({
 
   try {
     await access(path, fs.constants.R_OK)
-    reporter.verbose(`Cache hit: ${url}`)
+    reporter.info(`Cache hit: ${url}`)
     downloadCache.set(url, path)
 
     return path
@@ -110,12 +112,13 @@ export async function cacheContentfulVideo({
   }
 }
 
-interface processResultHelpers extends Pick<NodePluginArgs, 'store'> {}
+interface processResultHelpers
+  extends Pick<NodePluginArgs, 'store' | 'reporter'> {}
 
 // Analyze the resulting video and prepare field return values
 export async function processResult(
   { publicPath }: ConvertVideoResult,
-  { store }: processResultHelpers
+  { store, reporter }: processResultHelpers
 ) {
   const program = store.getState().program
   const rootDir = program.directory
@@ -160,7 +163,8 @@ export async function processResult(
   }
 }
 
-interface prepareAndAnalyzeVideoArgs extends Pick<NodePluginArgs, 'store'> {
+interface prepareAndAnalyzeVideoArgs
+  extends Pick<NodePluginArgs, 'store' | 'reporter'> {
   video: VideoNode
   fieldArgs: DefaultTransformerFieldArgs
   cacheDirOriginal: string
@@ -172,6 +176,7 @@ export async function prepareAndAnalyzeVideo({
   fieldArgs,
   store,
   cacheDirOriginal,
+  reporter,
 }: prepareAndAnalyzeVideoArgs) {
   const program = store.getState().program
   const rootDir = program.directory
@@ -201,6 +206,7 @@ export async function prepareAndAnalyzeVideo({
     fieldArgs,
     type,
     cacheDirOriginal,
+    reporter,
   })
 
   if (!metadata) {

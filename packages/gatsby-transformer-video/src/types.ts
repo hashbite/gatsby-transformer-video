@@ -25,7 +25,8 @@ export interface ProfileConfig<T extends DefaultTransformerFieldArgs> {
   extension: string
   converter: Profile<T>
 }
-export interface ConvertVideoArgs<T extends DefaultTransformerFieldArgs> {
+export interface ConvertVideoArgs<T extends DefaultTransformerFieldArgs>
+  extends Pick<NodePluginArgs, 'reporter'> {
   profile: Profile<T>
   sourcePath: string
   cachePath: string
@@ -113,7 +114,7 @@ export interface ScreenshotTransformerHelpers
   extends Pick<Actions, 'createNode'>,
     Pick<
       NodePluginArgs,
-      'cache' | 'getNode' | 'getCache' | 'createNodeId' | 'store'
+      'cache' | 'getNode' | 'getCache' | 'createNodeId' | 'store' | 'reporter'
     > {}
 
 export interface ScreenshotTransformerFieldArgs {
