@@ -1,10 +1,9 @@
-import { ensureDir } from 'fs-extra'
+import { ensureDir, move, pathExists, remove, rmdir } from 'fs-extra'
 import {
   CreateResolversArgs,
   CreateSchemaCustomizationArgs,
   ParentSpanPluginArgs,
 } from 'gatsby'
-import { GraphQLFloat, GraphQLInt, GraphQLString } from 'gatsby/graphql'
 import { ObjectTypeComposerFieldConfigMapDefinition } from 'graphql-compose'
 import imagemin from 'imagemin'
 import imageminGiflossy from 'imagemin-giflossy'
@@ -13,7 +12,7 @@ import { resolve } from 'path'
 
 import { downloadLibs, libsAlreadyDownloaded, libsInstalled } from './binaries'
 import FFMPEG from './ffmpeg'
-import { prepareAndAnalyzeVideo, processResult } from './helpers'
+import { prepareAndAnalyzeVideo, processResult, getCacheDirs } from './helpers'
 import { profileGif } from './profiles/gif'
 import { profileH264 } from './profiles/h264'
 import { profileH265 } from './profiles/h265'
@@ -33,28 +32,19 @@ import {
 } from './types'
 
 const platform = os.platform()
-const arch = os.arch()
-
-// @todo make configurable
-const CACHE_FOLDER_BIN = resolve(
-  `.bin`,
-  `gatsby-transformer-video`,
-  `${platform}-${arch}`
-)
-const CACHE_FOLDER_VIDEOS = resolve(`.cache-video`)
 
 const DEFAULT_ARGS = {
-  maxWidth: { type: GraphQLInt, defaultValue: 1920 },
-  maxHeight: { type: GraphQLInt, defaultValue: null },
-  duration: { type: GraphQLInt, defaultValue: null },
-  fps: { type: GraphQLInt, defaultValue: null },
-  saturation: { type: GraphQLFloat, defaultValue: 1 },
-  overlay: { type: GraphQLString, defaultValue: null },
-  overlayX: { type: GraphQLString, defaultValue: `center` },
-  overlayY: { type: GraphQLString, defaultValue: `center` },
-  overlayPadding: { type: GraphQLInt, defaultValue: 10 },
+  maxWidth: { type: 'Int', defaultValue: 1920 },
+  maxHeight: { type: 'Int', defaultValue: null },
+  duration: { type: 'Int', defaultValue: null },
+  fps: { type: 'Int', defaultValue: null },
+  saturation: { type: 'Float', defaultValue: 1 },
+  overlay: { type: 'String', defaultValue: null },
+  overlayX: { type: 'String', defaultValue: `center` },
+  overlayY: { type: 'String', defaultValue: `center` },
+  overlayPadding: { type: 'Int', defaultValue: 10 },
   publicPath: {
-    type: GraphQLString,
+    type: 'String',
     defaultValue: `static/videos`,
   },
 }
@@ -69,19 +59,19 @@ exports.createSchemaCustomization = ({
     schema.buildObjectType({
       name: `GatsbyVideo`,
       fields: {
-        path: GraphQLString,
-        absolutePath: GraphQLString,
-        name: GraphQLString,
-        ext: GraphQLString,
-        formatName: GraphQLString,
-        formatLongName: GraphQLString,
-        startTime: GraphQLFloat,
-        duration: GraphQLFloat,
-        size: GraphQLInt,
-        bitRate: GraphQLInt,
-        width: GraphQLInt,
-        height: GraphQLInt,
-        aspectRatio: GraphQLFloat,
+        path: { type: `String` },
+        absolutePath: { type: `String` },
+        name: { type: `String` },
+        ext: { type: `String` },
+        formatName: { type: `String` },
+        formatLongName: { type: `String` },
+        startTime: { type: `Float` },
+        duration: { type: `Float` },
+        size: { type: `Int` },
+        bitRate: { type: `Int` },
+        width: { type: `Int` },
+        height: { type: `Int` },
+        aspectRatio: { type: `Float` },
       },
     }),
   ]
@@ -105,6 +95,8 @@ exports.createResolvers = async (
     ffprobePath,
     downloadBinaries = true,
     profiles = {},
+    cacheDirectory,
+    cacheDirectoryBin,
   }: GatsbyTransformerVideoOptions
 ) => {
   const program = store.getState().program
@@ -112,30 +104,28 @@ exports.createResolvers = async (
 
   const alreadyInstalled = await libsInstalled()
 
+  const { cachePathBin, cachePathActive, cachePathRolling } = getCacheDirs({
+    cacheDirectory,
+    cacheDirectoryBin,
+  })
+
   // Set paths to our own binaries
   if (!alreadyInstalled && downloadBinaries && (!ffmpegPath || !ffprobePath)) {
     ffmpegPath = resolve(
-      CACHE_FOLDER_BIN,
+      cachePathBin,
       `ffmpeg${platform === `win32` ? `.exe` : ``}`
     )
     ffprobePath = resolve(
-      CACHE_FOLDER_BIN,
+      cachePathBin,
       `ffprobe${platform === `win32` ? `.exe` : ``}`
     )
   }
-  const cacheDir = CACHE_FOLDER_VIDEOS
-  const cacheVideosDir = resolve(CACHE_FOLDER_VIDEOS, 'videos')
-  const cacheScreenshotsDir = resolve(CACHE_FOLDER_VIDEOS, 'screenshots')
-
-  // @todo move to init?
-  await ensureDir(cacheVideosDir)
-  await ensureDir(cacheScreenshotsDir)
 
   const ffmpeg = new FFMPEG({
     rootDir,
-    cacheDir,
-    cacheVideosDir,
-    cacheScreenshotsDir,
+    cachePathBin,
+    cachePathActive,
+    cachePathRolling,
     ffmpegPath,
     ffprobePath,
     profiles,
@@ -182,10 +172,10 @@ exports.createResolvers = async (
       type: `GatsbyVideo`,
       args: {
         ...DEFAULT_ARGS,
-        crf: { type: GraphQLInt, defaultValue: 28 },
-        preset: { type: GraphQLString, defaultValue: `medium` },
-        maxRate: { type: GraphQLString },
-        bufSize: { type: GraphQLString },
+        crf: { type: 'Int', defaultValue: 28 },
+        preset: { type: 'String', defaultValue: `medium` },
+        maxRate: { type: 'String' },
+        bufSize: { type: 'String' },
       },
       resolve: resolveVideo({
         transformer: async ({
@@ -197,15 +187,13 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<H264TransformerFieldArgs>) => {
           const filename = `${name}-h264.mp4`
-          const cachePath = resolve(cacheVideosDir, filename)
-          const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
             profile: profileH264,
             profileName: 'H264',
             sourcePath: path,
-            cachePath,
-            publicPath,
+            filename,
+            publicDir,
             fieldArgs,
             info,
             reporter,
@@ -218,10 +206,10 @@ exports.createResolvers = async (
       type: `GatsbyVideo`,
       args: {
         ...DEFAULT_ARGS,
-        crf: { type: GraphQLInt, defaultValue: 31 },
-        preset: { type: GraphQLString, defaultValue: `medium` },
-        maxRate: { type: GraphQLInt },
-        bufSize: { type: GraphQLInt },
+        crf: { type: 'Int', defaultValue: 31 },
+        preset: { type: 'String', defaultValue: `medium` },
+        maxRate: { type: 'Int' },
+        bufSize: { type: 'Int' },
       },
       resolve: resolveVideo({
         transformer: async ({
@@ -233,15 +221,13 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<H265TransformerFieldArgs>) => {
           const filename = `${name}-h265.mp4`
-          const cachePath = resolve(cacheVideosDir, filename)
-          const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
             profile: profileH265,
             profileName: 'H265',
             sourcePath: path,
-            cachePath,
-            publicPath,
+            filename,
+            publicDir,
             fieldArgs,
             info,
             reporter,
@@ -254,11 +240,11 @@ exports.createResolvers = async (
       type: `GatsbyVideo`,
       args: {
         ...DEFAULT_ARGS,
-        crf: { type: GraphQLInt, defaultValue: 31 },
-        bitrate: { type: GraphQLString },
-        minrate: { type: GraphQLString },
-        maxrate: { type: GraphQLString },
-        cpuUsed: { type: GraphQLInt, defaultValue: 1 },
+        crf: { type: 'Int', defaultValue: 31 },
+        bitrate: { type: 'String' },
+        minrate: { type: 'String' },
+        maxrate: { type: 'String' },
+        cpuUsed: { type: 'Int', defaultValue: 1 },
       },
       resolve: resolveVideo({
         transformer: async ({
@@ -270,15 +256,13 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<VP9TransformerFieldArgs>) => {
           const filename = `${name}-vp9.webm`
-          const cachePath = resolve(cacheVideosDir, filename)
-          const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
             profile: profileVP9,
             profileName: 'VP9',
+            filename,
             sourcePath: path,
-            cachePath,
-            publicPath,
+            publicDir,
             fieldArgs,
             info,
             reporter,
@@ -302,15 +286,13 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
           const filename = `${name}-webp.webp`
-          const cachePath = resolve(cacheVideosDir, filename)
-          const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
             profile: profileWebP,
             profileName: 'WebP',
+            filename,
             sourcePath: path,
-            cachePath,
-            publicPath,
+            publicDir,
             fieldArgs,
             info,
             reporter,
@@ -334,22 +316,20 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
           const filename = `${name}-gif.gif`
-          const cachePath = resolve(cacheVideosDir, filename)
-          const publicPath = resolve(publicDir, filename)
 
-          const absolutePath = await ffmpeg.queueConvertVideo({
+          const videoResult = await ffmpeg.queueConvertVideo({
             profile: profileGif,
             profileName: 'Gif',
             sourcePath: path,
-            cachePath,
-            publicPath,
+            filename,
+            publicDir,
             fieldArgs,
             info,
             reporter,
             video,
           })
 
-          await imagemin([publicPath], {
+          await imagemin([videoResult.publicPath], {
             destination: publicDir,
             plugins: [
               imageminGiflossy({
@@ -361,14 +341,14 @@ exports.createResolvers = async (
             ],
           })
 
-          return absolutePath
+          return videoResult
         },
       }),
     },
     videoProfile: {
       type: `GatsbyVideo`,
       args: {
-        profile: { type: GraphQLString },
+        profile: { type: 'String' },
         ...DEFAULT_ARGS,
       },
       resolve: resolveVideo({
@@ -400,15 +380,13 @@ exports.createResolvers = async (
           }
 
           const filename = `${name}-${profileName}.${profile.extension}`
-          const cachePath = resolve(cacheVideosDir, filename)
-          const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
             profile: profile.converter,
             profileName: `Custom profile: ${profileName}`,
             sourcePath: path,
-            cachePath,
-            publicPath,
+            filename,
+            publicDir,
             fieldArgs,
             info,
             reporter,
@@ -420,8 +398,8 @@ exports.createResolvers = async (
     videoScreenshots: {
       type: `[File]`,
       args: {
-        timestamps: { type: [GraphQLString], defaultValue: [`0`] },
-        width: { type: GraphQLInt, defaultValue: 600 },
+        timestamps: { type: ['String'], defaultValue: [`0`] },
+        width: { type: 'Int', defaultValue: 600 },
       },
       resolve: async (
         video: VideoNode,
@@ -447,11 +425,40 @@ exports.createResolvers = async (
   createResolvers(resolvers)
 }
 
-// Download FFMPEG & FFPROBE binaries if they are not available.
+// Prepare rolling cache and download FFMPEG & FFPROBE binaries if they are not available.
 exports.onPreInit = async (
-  { store, reporter }: ParentSpanPluginArgs,
-  { downloadBinaries = true }
+  { reporter }: ParentSpanPluginArgs,
+  {
+    downloadBinaries = true,
+    cacheDirectory,
+    cacheDirectoryBin,
+  }: GatsbyTransformerVideoOptions
 ) => {
+  const {
+    cachePathBin: binariesDir,
+    cachePathActive,
+    cachePathRolling,
+  } = getCacheDirs({ cacheDirectory, cacheDirectoryBin })
+
+  if (process.env.NODE_ENV === 'production') {
+    const hasActiveCache = await pathExists(cachePathActive)
+    const hasRollingCache = await pathExists(cachePathRolling)
+    if (hasRollingCache && hasActiveCache) {
+      reporter.info(`Found old rolling cache. Deleting it.`)
+      await remove(cachePathRolling)
+    }
+    if (hasActiveCache) {
+      reporter.info(`Found video cache. Creating rolling cache.`)
+      await move(cachePathActive, cachePathRolling)
+    } else {
+      reporter.info(
+        `No video cache found. This build will generate all videos and screenshots.`
+      )
+    }
+  } else {
+    reporter.info(`Rolling cache disabled for development environment`)
+  }
+
   if (!downloadBinaries) {
     reporter.verbose(`Skipped download of FFMPEG & FFPROBE binaries`)
     return
@@ -465,9 +472,6 @@ exports.onPreInit = async (
   }
 
   const arch = os.arch()
-  const program = store.getState().program
-  const rootDir = program.directory
-  const binariesDir = resolve(rootDir, CACHE_FOLDER_BIN)
 
   try {
     await libsAlreadyDownloaded({ binariesDir })
@@ -485,5 +489,39 @@ exports.onPreInit = async (
     } catch (err) {
       throw err
     }
+  }
+}
+
+// Clean up rolling cache.
+exports.onPostBuild = async (
+  { reporter }: ParentSpanPluginArgs,
+  { cacheDirectory }: GatsbyTransformerVideoOptions
+) => {
+  const { cachePathActive, cachePathRolling } = getCacheDirs({ cacheDirectory })
+
+  const hasActiveCache = await pathExists(cachePathActive)
+  const hasRollingCache = await pathExists(cachePathRolling)
+
+  // Protect cache from partial rebuilds
+  if (
+    !hasActiveCache &&
+    hasRollingCache &&
+    process.env.NODE_ENV === 'production'
+  ) {
+    reporter.info(
+      `Potential partial build detected. Setting rolling cache as cache for next build.`
+    )
+    await move(cachePathRolling, cachePathActive)
+  }
+
+  // Delete stale files in rolling cache @todo ensure this runs on full builds only, otherwise merge these two folders
+  if (
+    hasActiveCache &&
+    hasRollingCache &&
+    process.env.NODE_ENV === 'production'
+  ) {
+    // @todo List what files are deleted. Maybe like Gatsby v4 does it at the end?
+    reporter.info(`Found rolling cache with leftover files. Deleting them.`)
+    await remove(cachePathRolling)
   }
 }
