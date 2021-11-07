@@ -93,7 +93,6 @@ interface AnalyzeVideoArgs extends Pick<NodePluginArgs, 'reporter' | 'cache'> {
   video: VideoNode
   fieldArgs: DefaultTransformerFieldArgs
   type: string
-  cacheDirOriginal: string
 }
 
 export const analyzeAndFetchVideo = async ({
@@ -139,29 +138,33 @@ export const analyzeAndFetchVideo = async ({
 }
 export default class FFMPEG {
   queue: PQueue
-  cacheDirOriginal: string
-  cacheDirConverted: string
+  cacheDir: string
+  cacheVideosDir: string
+  cacheScreenshotsDir: string
   rootDir: string
   profiles: Record<string, ProfileConfig<DefaultTransformerFieldArgs>>
 
   constructor({
     rootDir,
-    cacheDirOriginal,
-    cacheDirConverted,
+    cacheDir,
+    cacheVideosDir,
+    cacheScreenshotsDir,
     ffmpegPath,
     ffprobePath,
     profiles,
   }: {
-    cacheDirOriginal: string
-    cacheDirConverted: string
     rootDir: string
+    cacheDir: string
+    cacheVideosDir: string
+    cacheScreenshotsDir: string
     profiles: Record<string, ProfileConfig<DefaultTransformerFieldArgs>>
     ffmpegPath: string
     ffprobePath: string
   }) {
     this.queue = new PQueue({ concurrency: 1 })
-    this.cacheDirOriginal = cacheDirOriginal
-    this.cacheDirConverted = cacheDirConverted
+    this.cacheDir = cacheDir
+    this.cacheVideosDir = cacheVideosDir
+    this.cacheScreenshotsDir = cacheScreenshotsDir
     this.rootDir = rootDir
     this.profiles = profiles
 
@@ -295,17 +298,20 @@ export default class FFMPEG {
     }
 
     const { timestamps, width } = fieldArgs
-    const name = video.internal.contentDigest
-    const tmpDir = resolve(tmpdir(), `gatsby-transformer-video`, name)
-    const screenshotsConfig: ScreenshotsConfig = {
+    const screenshotsOptions = {
       timestamps,
-      filename: `${contentDigest}-%ss.png`,
-      folder: tmpDir,
       size: `${width}x?`,
+    }
+    contentDigest = createContentDigest({ contentDigest, screenshotsOptions })
+    const cacheDir = resolve(this.cacheScreenshotsDir, contentDigest)
+    const screenshotsConfig: ScreenshotsConfig = {
+      filename: `%ss.png`,
+      folder: cacheDir,
+      ...screenshotsOptions,
     }
 
     // Restore from cache if possible
-    const cacheKey = `screenshots-${createContentDigest(screenshotsConfig)}`
+    const cacheKey = `screenshots-${contentDigest}`
     const cachedScreenshotIds = await cache.get(cacheKey)
 
     if (Array.isArray(cachedScreenshotIds)) {
@@ -316,7 +322,7 @@ export default class FFMPEG {
       }
     }
 
-    await ensureDir(tmpDir)
+    await ensureDir(cacheDir)
 
     const screenshotRawNames = await new Promise<string[]>(
       (resolve, reject) => {
@@ -344,7 +350,7 @@ export default class FFMPEG {
 
     for (const screenshotRawName of screenshotRawNames) {
       try {
-        const rawScreenshotPath = resolve(tmpDir, screenshotRawName)
+        const rawScreenshotPath = resolve(cacheDir, screenshotRawName)
         const { name } = parse(rawScreenshotPath)
 
         try {
@@ -383,10 +389,6 @@ export default class FFMPEG {
         throw err
       }
     }
-
-    // Cleanup
-    await remove(tmpDir)
-
     // Store to cache
     const screenshotIds = screenshotNodes.map(({ id }) => id)
     await cache.set(cacheKey, screenshotIds)
