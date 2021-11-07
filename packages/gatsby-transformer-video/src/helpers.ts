@@ -137,8 +137,9 @@ export function generateTaskLabel({
 }: GenerateTaskLabelArgs<DefaultTransformerFieldArgs>) {
   const { base, file, contentful_id, id } = video
 
-  const label = `Video ${base || file.fileName}:${contentful_id ||
-    id} (${profileName})`
+  const label = `Video ${base || file.fileName}:${
+    contentful_id || id
+  } (${profileName})`
 
   return label
 }
