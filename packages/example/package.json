@@ -8,6 +8,7 @@
     "gatsby": "^4.1.0",
     "gatsby-plugin-gatsby-cloud": "^4.1.0",
     "gatsby-plugin-image": "^2.1.0",
+    "gatsby-plugin-sharp": "^4.1.0",
     "gatsby-source-contentful": "^6.1.0",
     "gatsby-source-filesystem": "^4.1.0",
     "gatsby-transformer-video": "*",
