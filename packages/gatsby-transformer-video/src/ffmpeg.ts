@@ -4,7 +4,18 @@ import ffmpeg, {
   FfprobeStream,
   ScreenshotsConfig,
 } from 'fluent-ffmpeg'
-import { access, copy, ensureDir, pathExists, remove, stat } from 'fs-extra'
+import {
+  access,
+  copy,
+  ensureDir,
+  pathExists,
+  pathExistsSync,
+  readdir,
+  readFile,
+  remove,
+  stat,
+  writeFile,
+} from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
 import { createContentDigest, fetchRemoteFile } from 'gatsby-core-utils'
 import { createFileNodeFromBuffer } from 'gatsby-source-filesystem'
@@ -193,9 +204,12 @@ export default class FFMPEG {
     reporter,
     video,
   }: ConvertVideoArgs<T>): Promise<ConvertVideoResult> => {
-    const alreadyExists = await pathExists(cachePath)
+    const alreadyCached = await pathExists(cachePath)
 
-    if (!alreadyExists) {
+    if (alreadyCached) {
+      const label = generateTaskLabel({ video, profileName })
+      reporter.info(`${label} - Restored from cache`)
+    } else {
       const ffmpegSession: FfmpegCommand = ffmpeg().input(sourcePath)
       const filters = this.createFilters({
         fieldArgs,
@@ -252,7 +266,6 @@ export default class FFMPEG {
       createNode,
       createNodeId,
       cache,
-      getNode,
       store,
       reporter,
     }: ScreenshotTransformerHelpers
@@ -304,98 +317,106 @@ export default class FFMPEG {
     }
     contentDigest = createContentDigest({ contentDigest, screenshotsOptions })
     const cacheDir = resolve(this.cacheScreenshotsDir, contentDigest)
-    const screenshotsConfig: ScreenshotsConfig = {
-      filename: `%ss.png`,
-      folder: cacheDir,
-      ...screenshotsOptions,
-    }
+    let screenshotPaths
 
-    // Restore from cache if possible
-    const cacheKey = `screenshots-${contentDigest}`
-    const cachedScreenshotIds = await cache.get(cacheKey)
+    try {
+      const screenshotNames = await readdir(cacheDir)
+      screenshotPaths = screenshotNames.map((name) => resolve(cacheDir, name))
 
-    if (Array.isArray(cachedScreenshotIds)) {
-      const cachedScreenshots = cachedScreenshotIds.map((id) => getNode(id))
-
-      if (cachedScreenshots.every((node) => typeof node !== 'undefined')) {
-        return cachedScreenshots
+      reporter.info(
+        `${label} - Restored ${screenshotPaths.length} ${width}px screenshots from cache`
+      )
+    } catch (err) {
+      const tmpDir = resolve(
+        tmpdir(),
+        'gatsby-transformer-video',
+        contentDigest
+      )
+      const screenshotsConfig: ScreenshotsConfig = {
+        filename: `%ss.png`,
+        folder: tmpDir,
+        ...screenshotsOptions,
       }
-    }
 
-    await ensureDir(cacheDir)
+      await ensureDir(tmpDir)
 
-    const screenshotRawNames = await new Promise<string[]>(
-      (resolve, reject) => {
-        let paths: string[]
-        ffmpeg(path)
-          .on(`filenames`, function(filenames) {
-            paths = filenames
-            reporter.info(
-              `${label} - Taking ${filenames.length} ${width}px screenshots`
-            )
-          })
-          .on(`error`, (err, stdout, stderr) => {
-            reporter.info(`${label} - Failed to take ${width}px screenshots:`)
-            console.error(err)
-            reject(err)
-          })
-          .on(`end`, () => {
-            resolve(paths)
-          })
-          .screenshots(screenshotsConfig)
-      }
-    )
-
-    const screenshotNodes = []
-
-    for (const screenshotRawName of screenshotRawNames) {
-      try {
-        const rawScreenshotPath = resolve(cacheDir, screenshotRawName)
-        const { name } = parse(rawScreenshotPath)
-
-        try {
-          await access(rawScreenshotPath)
-        } catch {
-          reporter.warn(`Screenshot ${rawScreenshotPath} could not be found!`)
-          continue
+      // Take raw screenshots and store to tmpDir
+      const screenshotRawNames = await new Promise<string[]>(
+        (resolve, reject) => {
+          let paths: string[]
+          ffmpeg(path)
+            .on(`filenames`, function(filenames) {
+              paths = filenames
+              reporter.info(
+                `${label} - Taking ${filenames.length} ${width}px screenshots`
+              )
+            })
+            .on(`error`, (err, stdout, stderr) => {
+              reporter.info(`${label} - Failed to take ${width}px screenshots:`)
+              console.error(err)
+              reject(err)
+            })
+            .on(`end`, () => {
+              resolve(paths)
+            })
+            .screenshots(screenshotsConfig)
         }
+      )
 
-        const jpgBuffer = await sharp(rawScreenshotPath)
-          .jpeg({
-            quality: 80,
-            progressive: true,
+      // process raw screenshots and store to cache
+      screenshotPaths = []
+      for (const screenshotRawName of screenshotRawNames) {
+        try {
+          const screenshotRawPath = resolve(tmpDir, screenshotRawName)
+
+          // Transform to progressive jpg
+          const jpgBuffer = await sharp(screenshotRawPath)
+            .jpeg({
+              quality: 80,
+              progressive: true,
+            })
+            .toBuffer()
+
+          // Optimize with imagemin
+          const optimizedBuffer = await imagemin.buffer(jpgBuffer, {
+            plugins: [imageminMozjpeg()],
           })
-          .toBuffer()
 
-        const optimizedBuffer = await imagemin.buffer(jpgBuffer, {
-          plugins: [imageminMozjpeg()],
-        })
-
-        const node = await createFileNodeFromBuffer({
-          ext: `.jpg`,
-          name,
-          buffer: optimizedBuffer,
-          cache,
-          store,
-          createNode,
-          createNodeId,
-          parentNodeId: video.id,
-        })
-
-        screenshotNodes.push(node)
-      } catch (err) {
-        reporter.info(`${label} - Failed to take screenshots:`)
-        console.error(err)
-        throw err
+          // Store to fs cache
+          await ensureDir(cacheDir)
+          const cachePath = resolve(cacheDir, screenshotRawName)
+          await writeFile(cachePath, optimizedBuffer)
+          screenshotPaths.push(cachePath)
+        } catch (err) {
+          reporter.info(
+            `${label} - Failed to process screenshot ${screenshotRawName}`
+          )
+          console.error(err)
+          throw err
+        }
       }
+      reporter.info(
+        `${label} - Took ${screenshotRawNames.length} ${width}px screenshots`
+      )
     }
-    // Store to cache
-    const screenshotIds = screenshotNodes.map(({ id }) => id)
-    await cache.set(cacheKey, screenshotIds)
 
-    reporter.info(
-      `${label} - Took ${screenshotNodes.length} ${width}px screenshots`
-    )
+    // loop paths
+    const screenshotNodes = []
+    for (const screenshotPath of screenshotPaths) {
+      const screenshotBuffer = await readFile(screenshotPath)
+      // read file to buffer screenshotPath
+      const node = await createFileNodeFromBuffer({
+        ext: `.jpg`,
+        buffer: screenshotBuffer,
+        cache,
+        store,
+        createNode,
+        createNodeId,
+        parentNodeId: video.id,
+      })
+
+      screenshotNodes.push(node)
+    }
 
     return screenshotNodes
   }

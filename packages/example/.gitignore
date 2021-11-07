@@ -1,3 +1,5 @@
 public
+.bin
 .cache
+.cache-video
 node_modules
