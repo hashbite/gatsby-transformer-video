@@ -1,11 +1,19 @@
 import axios from 'axios'
+import { FfprobeData } from 'fluent-ffmpeg'
 import fs from 'fs'
-import { access } from 'fs-extra'
+import { access, ensureDir } from 'fs-extra'
+import { NodePluginArgs } from 'gatsby'
 import reporter from 'gatsby-cli/lib/reporter'
 import PQueue from 'p-queue'
-import { extname, resolve } from 'path'
+import { extname, parse, resolve } from 'path'
 
-import { VideoNode } from './types'
+import { analyzeVideo, executeFfprobe } from './ffmpeg'
+import {
+  ConvertVideoResult,
+  DefaultTransformerFieldArgs,
+  VideoNode,
+  WrongFileTypeError,
+} from './types'
 
 const downloadQueue = new PQueue({ concurrency: 3 })
 
@@ -99,5 +107,117 @@ export async function cacheContentfulVideo({
     downloadCache.set(url, downloadPromise)
 
     return downloadPromise
+  }
+}
+
+interface processResultHelpers extends Pick<NodePluginArgs, 'store'> {}
+
+// Analyze the resulting video and prepare field return values
+export async function processResult(
+  { publicPath }: ConvertVideoResult,
+  { store }: processResultHelpers
+) {
+  const program = store.getState().program
+  const rootDir = program.directory
+
+  try {
+    const result: FfprobeData = await executeFfprobe(publicPath)
+
+    const {
+      format_name: formatName,
+      format_long_name: formatLongName,
+      start_time: startTime,
+      duration: duration,
+      size: size,
+      bit_rate: bitRate,
+    } = result.format
+
+    const { width, height } = result.streams[0]
+    const aspectRatio = (width || 1) / (height || 1)
+
+    const path = publicPath.replace(resolve(rootDir, `public`), ``)
+
+    const { name, ext } = parse(publicPath)
+
+    return {
+      path,
+      absolutePath: publicPath,
+      name,
+      ext,
+      formatName,
+      formatLongName,
+      startTime: startTime || null,
+      duration: duration || null,
+      size: size || null,
+      bitRate: bitRate || null,
+      width,
+      height,
+      aspectRatio,
+    }
+  } catch (err) {
+    reporter.error(`Unable to analyze video file: ${publicPath}`)
+    throw err
+  }
+}
+
+interface prepareAndAnalyzeVideoArgs extends Pick<NodePluginArgs, 'store'> {
+  video: VideoNode
+  fieldArgs: DefaultTransformerFieldArgs
+  cacheDirOriginal: string
+}
+
+// Get source videos metadata and download the file if required
+export async function prepareAndAnalyzeVideo({
+  video,
+  fieldArgs,
+  store,
+  cacheDirOriginal,
+}: prepareAndAnalyzeVideoArgs) {
+  const program = store.getState().program
+  const rootDir = program.directory
+  const { type } = video.internal
+
+  let fileType = null
+  if (type === `File`) {
+    fileType = video.internal.mediaType
+  }
+
+  if (type === `ContentfulAsset`) {
+    fileType = video.file.contentType
+  }
+
+  if (!fileType) {
+    throw new Error(
+      `Unable to extract asset file type for ${type} (${video.id})`
+    )
+  }
+
+  if (fileType.indexOf(`video/`) === -1) {
+    throw new WrongFileTypeError()
+  }
+
+  const metadata = await analyzeVideo({
+    video,
+    fieldArgs,
+    type,
+    cacheDirOriginal,
+  })
+
+  if (!metadata) {
+    throw new Error(
+      `Unable to read metadata from:\n\n${JSON.stringify(video, null, 2)}`
+    )
+  }
+
+  const { path, filename: name, info } = metadata
+  const publicDir = resolve(rootDir, `public`, fieldArgs.publicPath)
+
+  await ensureDir(publicDir)
+
+  return {
+    publicDir,
+    path,
+    name,
+    info,
   }
 }

@@ -1,4 +1,3 @@
-import { FfprobeData } from 'fluent-ffmpeg'
 import { ensureDir } from 'fs-extra'
 import {
   CreateResolversArgs,
@@ -11,10 +10,11 @@ import { ObjectTypeComposerFieldConfigMapDefinition } from 'graphql-compose'
 import imagemin from 'imagemin'
 import imageminGiflossy from 'imagemin-giflossy'
 import os from 'os'
-import { parse, resolve } from 'path'
+import { resolve } from 'path'
 
 import { downloadLibs, libsAlreadyDownloaded, libsInstalled } from './binaries'
 import FFMPEG from './ffmpeg'
+import { prepareAndAnalyzeVideo, processResult } from './helpers'
 import { profileGif } from './profiles/gif'
 import { profileH264 } from './profiles/h264'
 import { profileH265 } from './profiles/h265'
@@ -30,6 +30,7 @@ import {
   VideoNode,
   VideoTransformerArgs,
   VP9TransformerFieldArgs,
+  WrongFileTypeError,
 } from './types'
 
 const platform = os.platform()
@@ -46,8 +47,6 @@ const CACHE_FOLDER_VIDEOS = resolve(
   `.cache`,
   `gatsby-transformer-video`
 )
-
-class WrongFileTypeError extends Error {}
 
 const DEFAULT_ARGS = {
   maxWidth: { type: GraphQLInt, defaultValue: 1920 },
@@ -145,104 +144,8 @@ exports.createResolvers = async (
     profiles,
   })
 
-  // Get source videos metadata and download the file if required
-  async function prepareAndAnalyzeVideo({
-    video,
-    fieldArgs,
-  }: {
-    video: VideoNode
-    fieldArgs: DefaultTransformerFieldArgs
-  }) {
-    const { type } = video.internal
-
-    let fileType = null
-    if (type === `File`) {
-      fileType = video.internal.mediaType
-    }
-
-    if (type === `ContentfulAsset`) {
-      fileType = video.file.contentType
-    }
-
-    if (!fileType) {
-      throw new Error(
-        `Unable to extract asset file type for ${type} (${video.id})`
-      )
-    }
-
-    if (fileType.indexOf(`video/`) === -1) {
-      throw new WrongFileTypeError()
-    }
-
-    const metadata = await ffmpeg.analyzeVideo({
-      video,
-      fieldArgs,
-      type,
-    })
-
-    if (!metadata) {
-      throw new Error(
-        `Unable to read metadata from:\n\n${JSON.stringify(video, null, 2)}`
-      )
-    }
-
-    const { path, filename: name, info } = metadata
-    const publicDir = resolve(rootDir, `public`, fieldArgs.publicPath)
-
-    await ensureDir(publicDir)
-
-    return {
-      publicDir,
-      path,
-      name,
-      info,
-    }
-  }
-
-  // Analyze the resulting video and prepare field return values
-  async function processResult({ publicPath }: { publicPath: string }) {
-    try {
-      const result: FfprobeData = await ffmpeg.executeFfprobe(publicPath)
-
-      const {
-        format_name: formatName,
-        format_long_name: formatLongName,
-        start_time: startTime,
-        duration: duration,
-        size: size,
-        bit_rate: bitRate,
-      } = result.format
-
-      const { width, height } = result.streams[0]
-      const aspectRatio = (width || 1) / (height || 1)
-
-      const path = publicPath.replace(resolve(rootDir, `public`), ``)
-
-      const { name, ext } = parse(publicPath)
-
-      return {
-        path,
-        absolutePath: publicPath,
-        name,
-        ext,
-        formatName,
-        formatLongName,
-        startTime: startTime || null,
-        duration: duration || null,
-        size: size || null,
-        bitRate: bitRate || null,
-        width,
-        height,
-        aspectRatio,
-      }
-    } catch (err) {
-      reporter.error(`Unable to analyze video file: ${publicPath}`)
-      throw err
-    }
-  }
-
-  // Transform video with a given transformer & codec
-  function transformVideo<T extends DefaultTransformerFieldArgs>({
+  // Resolves a video with a given transformer & codec
+  function resolveVideo<T extends DefaultTransformerFieldArgs>({
     transformer,
   }: {
     transformer: Transformer<T>
@@ -252,6 +155,8 @@ exports.createResolvers = async (
         const { publicDir, path, name, info } = await prepareAndAnalyzeVideo({
           video,
           fieldArgs,
+          store,
+          cacheDirOriginal,
         })
 
         const videoData = await transformer({
@@ -262,7 +167,7 @@ exports.createResolvers = async (
           info,
         })
 
-        return await processResult(videoData)
+        return await processResult(videoData, { store })
       } catch (err) {
         if (!(err instanceof WrongFileTypeError)) {
           throw err
@@ -283,7 +188,7 @@ exports.createResolvers = async (
         maxRate: { type: GraphQLString },
         bufSize: { type: GraphQLString },
       },
-      resolve: transformVideo({
+      resolve: resolveVideo({
         transformer: async ({
           publicDir,
           path,
@@ -315,7 +220,7 @@ exports.createResolvers = async (
         maxRate: { type: GraphQLInt },
         bufSize: { type: GraphQLInt },
       },
-      resolve: transformVideo({
+      resolve: resolveVideo({
         transformer: async ({
           publicDir,
           path,
@@ -348,7 +253,7 @@ exports.createResolvers = async (
         maxrate: { type: GraphQLString },
         cpuUsed: { type: GraphQLInt, defaultValue: 1 },
       },
-      resolve: transformVideo({
+      resolve: resolveVideo({
         transformer: async ({
           publicDir,
           path,
@@ -376,7 +281,7 @@ exports.createResolvers = async (
       args: {
         ...DEFAULT_ARGS,
       },
-      resolve: transformVideo({
+      resolve: resolveVideo({
         transformer: async ({
           publicDir,
           path,
@@ -404,7 +309,7 @@ exports.createResolvers = async (
       args: {
         ...DEFAULT_ARGS,
       },
-      resolve: transformVideo({
+      resolve: resolveVideo({
         transformer: async ({
           publicDir,
           path,
@@ -447,7 +352,7 @@ exports.createResolvers = async (
         profile: { type: GraphQLString },
         ...DEFAULT_ARGS,
       },
-      resolve: transformVideo({
+      resolve: resolveVideo({
         transformer: async ({
           publicDir,
           path,
@@ -518,12 +423,11 @@ exports.createResolvers = async (
   createResolvers(resolvers)
 }
 
+// Download FFMPEG & FFPROBE binaries if they are not available.
 exports.onPreInit = async (
   { store }: ParentSpanPluginArgs,
   { downloadBinaries = true }
 ) => {
-  console.log('Testing... FINDME')
-
   if (!downloadBinaries) {
     reporter.verbose(`Skipped download of FFMPEG & FFPROBE binaries`)
     return

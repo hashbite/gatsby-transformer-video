@@ -28,6 +28,106 @@ import {
   VideoStreamMetadata,
 } from './types'
 
+// Execute FFPROBE and return metadata
+export const executeFfprobe = (path: string): Promise<FfprobeData> =>
+  new Promise((resolve, reject) => {
+    ffmpeg(path).ffprobe((err, data) => {
+      if (err) reject(err)
+      resolve(data)
+    })
+  })
+
+// Execute FFMMPEG and log progress
+export const executeFfmpeg = async ({
+  ffmpegSession,
+  cachePath,
+}: {
+  ffmpegSession: ffmpeg.FfmpegCommand
+  cachePath: string
+}) => {
+  let startTime: number
+  let lastLoggedPercent = 0.1
+
+  const { name } = parse(cachePath)
+
+  return new Promise<void>((resolve, reject) => {
+    ffmpegSession
+      .on(`start`, (commandLine) => {
+        reporter.info(`${name} - converting`)
+        reporter.verbose(`${name} - executing:\n\n${commandLine}\n`)
+        startTime = performance.now()
+      })
+      .on(`progress`, (progress) => {
+        if (progress.percent > lastLoggedPercent + 10) {
+          const percent = Math.floor(progress.percent)
+          const elapsedTime = Math.ceil((performance.now() - startTime) / 1000)
+          const estTotalTime = (100 / percent) * elapsedTime
+          const estTimeLeft = Math.ceil(estTotalTime - elapsedTime)
+          const loggedTimeLeft =
+            estTimeLeft !== Infinity && ` (~${estTimeLeft}s)`
+
+          reporter.info(`${name} - ${percent}%${loggedTimeLeft}`)
+          lastLoggedPercent = progress.percent
+        }
+      })
+      .on(`error`, (err, stdout, stderr) => {
+        reporter.info(`\n---\n${stdout}\n\n${stderr}\n---\n`)
+        reporter.info(`${name} - An error occurred:`)
+        console.error(err)
+        reject(err)
+      })
+      .on(`end`, () => {
+        reporter.info(`${name} - converted`)
+        resolve()
+      })
+      .save(cachePath)
+  })
+}
+
+// Analyze video and download if neccessary
+export const analyzeVideo = async ({
+  video,
+  fieldArgs,
+  type,
+  cacheDirOriginal,
+}: {
+  video: VideoNode
+  fieldArgs: DefaultTransformerFieldArgs
+  type: string
+  cacheDirOriginal: string
+}) => {
+  let path
+  let contentDigest = video.internal.contentDigest
+
+  if (type === `File`) {
+    path = video.absolutePath
+  }
+
+  if (type === `ContentfulAsset`) {
+    contentDigest = createContentDigest([
+      video.contentful_id,
+      video.file.url,
+      video.file.details.size,
+    ])
+    path = await cacheContentfulVideo({
+      video,
+      contentDigest,
+      cacheDir: cacheDirOriginal,
+    })
+  }
+
+  if (!path) {
+    throw new Error(`Unable to locate video file for ${type} (${video.id})`)
+  }
+
+  const optionsHash = createContentDigest(fieldArgs)
+
+  const filename = `${optionsHash}-${contentDigest}`
+
+  const info = await executeFfprobe(path)
+
+  return { path, filename, info }
+}
 export default class FFMPEG {
   queue: PQueue
   cacheDirOriginal: string
@@ -64,109 +164,7 @@ export default class FFMPEG {
     }
   }
 
-  // Execute FFPROBE and return metadata
-  executeFfprobe = (path: string): Promise<FfprobeData> =>
-    new Promise((resolve, reject) => {
-      ffmpeg(path).ffprobe((err, data) => {
-        if (err) reject(err)
-        resolve(data)
-      })
-    })
-
-  // Execute FFMMPEG and log progress
-  executeFfmpeg = async ({
-    ffmpegSession,
-    cachePath,
-  }: {
-    ffmpegSession: ffmpeg.FfmpegCommand
-    cachePath: string
-  }) => {
-    let startTime: number
-    let lastLoggedPercent = 0.1
-
-    const { name } = parse(cachePath)
-
-    return new Promise<void>((resolve, reject) => {
-      ffmpegSession
-        .on(`start`, (commandLine) => {
-          reporter.info(`${name} - converting`)
-          reporter.verbose(`${name} - executing:\n\n${commandLine}\n`)
-          startTime = performance.now()
-        })
-        .on(`progress`, (progress) => {
-          if (progress.percent > lastLoggedPercent + 10) {
-            const percent = Math.floor(progress.percent)
-            const elapsedTime = Math.ceil(
-              (performance.now() - startTime) / 1000
-            )
-            const estTotalTime = (100 / percent) * elapsedTime
-            const estTimeLeft = Math.ceil(estTotalTime - elapsedTime)
-            const loggedTimeLeft =
-              estTimeLeft !== Infinity && ` (~${estTimeLeft}s)`
-
-            reporter.info(`${name} - ${percent}%${loggedTimeLeft}`)
-            lastLoggedPercent = progress.percent
-          }
-        })
-        .on(`error`, (err, stdout, stderr) => {
-          reporter.info(`\n---\n${stdout}\n\n${stderr}\n---\n`)
-          reporter.info(`${name} - An error occurred:`)
-          console.error(err)
-          reject(err)
-        })
-        .on(`end`, () => {
-          reporter.info(`${name} - converted`)
-          resolve()
-        })
-        .save(cachePath)
-    })
-  }
-
-  // Analyze video and download if neccessary
-  analyzeVideo = async ({
-    video,
-    fieldArgs,
-    type,
-  }: {
-    video: VideoNode
-    fieldArgs: DefaultTransformerFieldArgs
-    type: string
-  }) => {
-    let path
-    let contentDigest = video.internal.contentDigest
-
-    if (type === `File`) {
-      path = video.absolutePath
-    }
-
-    if (type === `ContentfulAsset`) {
-      contentDigest = createContentDigest([
-        video.contentful_id,
-        video.file.url,
-        video.file.details.size,
-      ])
-      path = await cacheContentfulVideo({
-        video,
-        contentDigest,
-        cacheDir: this.cacheDirOriginal,
-      })
-    }
-
-    if (!path) {
-      throw new Error(`Unable to locate video file for ${type} (${video.id})`)
-    }
-
-    const optionsHash = createContentDigest(fieldArgs)
-
-    const filename = `${optionsHash}-${contentDigest}`
-
-    const info = await this.executeFfprobe(path)
-
-    return { path, filename, info }
-  }
-
   // Queue video for conversion
-  // @stephan
   queueConvertVideo = async <T extends DefaultTransformerFieldArgs>(
     videoConversionData: ConvertVideoArgs<T>
   ) => this.queue.add(() => this.convertVideo(videoConversionData))
@@ -198,7 +196,7 @@ export default class FFMPEG {
       })
 
       this.enhanceFfmpegForFilters({ ffmpegSession, fieldArgs })
-      await this.executeFfmpeg({ ffmpegSession, cachePath })
+      await executeFfmpeg({ ffmpegSession, cachePath })
     }
 
     // If public file does not exist, copy cached file

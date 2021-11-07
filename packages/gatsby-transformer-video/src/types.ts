@@ -120,3 +120,5 @@ export interface ScreenshotTransformerFieldArgs {
   timestamps: string[]
   width: number
 }
+
+export class WrongFileTypeError extends Error {}
