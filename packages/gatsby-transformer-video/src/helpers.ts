@@ -1,116 +1,15 @@
-import axios from 'axios'
 import { FfprobeData } from 'fluent-ffmpeg'
-import fs from 'fs'
-import { access, ensureDir } from 'fs-extra'
+import { ensureDir } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
-import PQueue from 'p-queue'
-import { extname, parse, resolve } from 'path'
+import { parse, resolve } from 'path'
 
-import { analyzeVideo, executeFfprobe } from './ffmpeg'
+import { analyzeAndFetchVideo, executeFfprobe } from './ffmpeg'
 import {
   ConvertVideoResult,
   DefaultTransformerFieldArgs,
   VideoNode,
   WrongFileTypeError,
 } from './types'
-
-const downloadQueue = new PQueue({ concurrency: 3 })
-
-const downloadCache = new Map()
-
-// @todo we can use it now!
-
-/**
- * Download and cache video from Contentful for further processing
- *
- * This is not using createRemoteFileNode of gatsby-source-filesystem because of:
- *
- * Retry is currently broken: https://github.com/gatsbyjs/gatsby/issues/22010
- * Downloaded files are not cached properly: https://github.com/gatsbyjs/gatsby/issues/8324 & https://github.com/gatsbyjs/gatsby/pull/8379
- */
-interface CacheContentfulVideoArgs extends Pick<NodePluginArgs, 'reporter'> {
-  video: VideoNode
-  cacheDir: string
-  contentDigest: string
-}
-
-export async function cacheContentfulVideo({
-  video,
-  cacheDir,
-  contentDigest,
-  reporter,
-}: CacheContentfulVideoArgs) {
-  const {
-    file: { url, fileName },
-  } = video
-
-  const path = resolve(cacheDir, `${contentDigest}.${extname(fileName)}`)
-
-  try {
-    await access(path, fs.constants.R_OK)
-    reporter.info(`Cache hit: ${url}`)
-    downloadCache.set(url, path)
-
-    return path
-  } catch {
-    if (downloadCache.has(url)) {
-      // Already in download queue
-      return downloadCache.get(url)
-    }
-
-    async function queuedDownload() {
-      let tries = 0
-      let downloaded = false
-
-      while (!downloaded) {
-        try {
-          await downloadQueue.add(async () => {
-            reporter.info(`Downloading: ${url}`)
-
-            const response = await axios({
-              method: `get`,
-              url: `https:${url}`,
-              responseType: `stream`,
-            })
-
-            await new Promise((resolve, reject) => {
-              const file = fs.createWriteStream(path)
-
-              file.on(`finish`, resolve)
-              file.on(`error`, reject)
-              response.data.pipe(file)
-            })
-
-            downloaded = true
-          })
-        } catch (e) {
-          tries++
-
-          if (tries === 3) {
-            throw new Error(
-              `Download of ${url} failed after three times:\n\n${e}`
-            )
-          }
-          reporter.info(
-            `Unable to download ${url}\n\nRetrying again after 1s (${tries}/3)`
-          )
-          console.error(e)
-          await new Promise((resolve) => setTimeout(resolve, 1000))
-        }
-      }
-
-      reporter.info(`Downloaded: ${url}, returning path`)
-
-      return path
-    }
-
-    const downloadPromise = queuedDownload()
-
-    downloadCache.set(url, downloadPromise)
-
-    return downloadPromise
-  }
-}
 
 interface processResultHelpers
   extends Pick<NodePluginArgs, 'store' | 'reporter'> {}
@@ -164,7 +63,7 @@ export async function processResult(
 }
 
 interface prepareAndAnalyzeVideoArgs
-  extends Pick<NodePluginArgs, 'store' | 'reporter'> {
+  extends Pick<NodePluginArgs, 'store' | 'reporter' | 'cache'> {
   video: VideoNode
   fieldArgs: DefaultTransformerFieldArgs
   cacheDirOriginal: string
@@ -177,6 +76,7 @@ export async function prepareAndAnalyzeVideo({
   store,
   cacheDirOriginal,
   reporter,
+  cache,
 }: prepareAndAnalyzeVideoArgs) {
   const program = store.getState().program
   const rootDir = program.directory
@@ -201,12 +101,13 @@ export async function prepareAndAnalyzeVideo({
     throw new WrongFileTypeError()
   }
 
-  const metadata = await analyzeVideo({
+  const metadata = await analyzeAndFetchVideo({
     video,
     fieldArgs,
     type,
     cacheDirOriginal,
     reporter,
+    cache,
   })
 
   if (!metadata) {
@@ -239,8 +140,9 @@ export function generateTaskLabel({
 }: GenerateTaskLabelArgs<DefaultTransformerFieldArgs>) {
   const { base, file, contentful_id, id } = video
 
-  const label = `Video ${base || file.fileName}:${contentful_id ||
-    id} (${profileName})`
+  const label = `Video ${base || file.fileName}:${
+    contentful_id || id
+  } (${profileName})`
 
   return label
 }
