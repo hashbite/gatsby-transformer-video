@@ -48,9 +48,9 @@ export interface ConvertVideoArgs<T extends DefaultTransformerFieldArgs>
   extends Pick<NodePluginArgs, 'reporter'> {
   profile: Profile<T>
   profileName: string
+  filename: string
   sourcePath: string
-  cachePath: string
-  publicPath: string
+  publicDir: string
   fieldArgs: T
   info: FfprobeData
   video: VideoNode
@@ -61,6 +61,8 @@ export interface GatsbyTransformerVideoOptions {
   ffprobePath: string
   downloadBinaries: boolean
   profiles: Record<string, ProfileConfig<DefaultTransformerFieldArgs>>
+  cacheDirectory: string
+  cacheDirectoryBin: string
 }
 
 export type Transformer<T extends DefaultTransformerFieldArgs> = (
@@ -126,3 +128,9 @@ export interface ScreenshotTransformerFieldArgs {
 }
 
 export class WrongFileTypeError extends Error {}
+
+export interface RestoreFromCacheArgs extends Pick<NodePluginArgs, 'reporter'> {
+  label: string
+  activePath: string
+  rollingPath: string
+}

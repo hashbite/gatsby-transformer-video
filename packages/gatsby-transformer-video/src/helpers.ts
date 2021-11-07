@@ -2,6 +2,7 @@ import { FfprobeData } from 'fluent-ffmpeg'
 import { ensureDir } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
 import { parse, resolve } from 'path'
+import { arch, platform } from 'os'
 
 import { analyzeAndFetchVideo, executeFfprobe } from './ffmpeg'
 import {
@@ -137,9 +138,20 @@ export function generateTaskLabel({
 }: GenerateTaskLabelArgs<DefaultTransformerFieldArgs>) {
   const { base, file, contentful_id, id } = video
 
-  const label = `Video ${base || file.fileName}:${
-    contentful_id || id
-  } (${profileName})`
+  const label = `Video ${base || file.fileName}:${contentful_id ||
+    id} (${profileName})`
 
   return label
+}
+
+const DEFAULT_BIN = resolve(`.bin`, `gatsby-transformer-video`)
+export function getCacheDirs({
+  cacheDirectory = `.cache-video`,
+  cacheDirectoryBin = DEFAULT_BIN,
+}) {
+  const cachePathBin = resolve(cacheDirectoryBin, `${platform()}-${arch()}`)
+  const cachePathActive = resolve(cacheDirectory)
+  const cachePathRolling = resolve(`${cacheDirectory}-rolling`)
+
+  return { cachePathBin, cachePathActive, cachePathRolling }
 }

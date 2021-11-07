@@ -5,16 +5,14 @@ import ffmpeg, {
   ScreenshotsConfig,
 } from 'fluent-ffmpeg'
 import {
-  access,
   copy,
   ensureDir,
   pathExists,
-  pathExistsSync,
   readdir,
   readFile,
-  remove,
   stat,
   writeFile,
+  move,
 } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
 import { createContentDigest, fetchRemoteFile } from 'gatsby-core-utils'
@@ -33,6 +31,7 @@ import {
   ConvertVideoResult,
   DefaultTransformerFieldArgs,
   ProfileConfig,
+  RestoreFromCacheArgs,
   ScreenshotTransformerFieldArgs,
   ScreenshotTransformerHelpers,
   VideoNode,
@@ -114,6 +113,7 @@ export const analyzeAndFetchVideo = async ({
 }: AnalyzeVideoArgs) => {
   let path
   let contentDigest = video.internal.contentDigest
+  const { name } = parse(video.base || video.file.fileName)
 
   if (type === `File`) {
     path = video.absolutePath
@@ -141,7 +141,7 @@ export const analyzeAndFetchVideo = async ({
 
   const optionsHash = createContentDigest(fieldArgs)
 
-  const filename = `${optionsHash}-${contentDigest}`
+  const filename = `${name}-${contentDigest}-${optionsHash}`
 
   const info = await executeFfprobe(path)
 
@@ -149,33 +149,33 @@ export const analyzeAndFetchVideo = async ({
 }
 export default class FFMPEG {
   queue: PQueue
-  cacheDir: string
-  cacheVideosDir: string
-  cacheScreenshotsDir: string
+  cachePathBin: string
+  cachePathActive: string
+  cachePathRolling: string
   rootDir: string
   profiles: Record<string, ProfileConfig<DefaultTransformerFieldArgs>>
 
   constructor({
     rootDir,
-    cacheDir,
-    cacheVideosDir,
-    cacheScreenshotsDir,
+    cachePathBin,
+    cachePathActive,
+    cachePathRolling,
     ffmpegPath,
     ffprobePath,
     profiles,
   }: {
     rootDir: string
-    cacheDir: string
-    cacheVideosDir: string
-    cacheScreenshotsDir: string
+    cachePathBin: string
+    cachePathActive: string
+    cachePathRolling: string
     profiles: Record<string, ProfileConfig<DefaultTransformerFieldArgs>>
     ffmpegPath: string
     ffprobePath: string
   }) {
     this.queue = new PQueue({ concurrency: 1 })
-    this.cacheDir = cacheDir
-    this.cacheVideosDir = cacheVideosDir
-    this.cacheScreenshotsDir = cacheScreenshotsDir
+    this.cachePathBin = cachePathBin
+    this.cachePathActive = cachePathActive
+    this.cachePathRolling = cachePathRolling
     this.rootDir = rootDir
     this.profiles = profiles
 
@@ -187,6 +187,26 @@ export default class FFMPEG {
     }
   }
 
+  // Restore file either from active or rolling cache directory
+  restoreFromCache = async ({
+    label,
+    activePath,
+    rollingPath,
+    reporter,
+  }: RestoreFromCacheArgs) => {
+    const inActiveCache = await pathExists(activePath)
+
+    if (!inActiveCache) {
+      const inRollingCached = await pathExists(rollingPath)
+      if (inRollingCached) {
+        await move(rollingPath, activePath)
+        reporter.info(`${label} - Restored from rolling cache`)
+        return true
+      }
+    }
+    return inActiveCache
+  }
+
   // Queue video for conversion
   queueConvertVideo = async <T extends DefaultTransformerFieldArgs>(
     videoConversionData: ConvertVideoArgs<T>
@@ -196,20 +216,30 @@ export default class FFMPEG {
   convertVideo = async <T extends DefaultTransformerFieldArgs>({
     profile,
     profileName,
+    filename,
     sourcePath,
-    cachePath,
-    publicPath,
+    publicDir,
     fieldArgs,
     info,
     reporter,
     video,
   }: ConvertVideoArgs<T>): Promise<ConvertVideoResult> => {
-    const alreadyCached = await pathExists(cachePath)
+    const { cachePathActive, cachePathRolling } = this
+    const label = generateTaskLabel({ video, profileName })
+    const activePath = resolve(cachePathActive, 'videos', filename)
+    const rollingPath = resolve(cachePathRolling, 'videos', filename)
 
-    if (alreadyCached) {
-      const label = generateTaskLabel({ video, profileName })
-      reporter.info(`${label} - Restored from cache`)
-    } else {
+    const restoredFromCache = await this.restoreFromCache({
+      label,
+      activePath,
+      rollingPath,
+      reporter,
+    })
+
+    if (!restoredFromCache) {
+      const cachePath = activePath
+      const { dir } = parse(activePath)
+      await ensureDir(dir)
       const ffmpegSession: FfmpegCommand = ffmpeg().input(sourcePath)
       const filters = this.createFilters({
         fieldArgs,
@@ -235,18 +265,19 @@ export default class FFMPEG {
     }
 
     // If public file does not exist, copy cached file
+    const publicPath = resolve(publicDir, 'videos', filename)
     const publicExists = await pathExists(publicPath)
 
     if (!publicExists) {
-      await copy(cachePath, publicPath)
+      await copy(activePath, publicPath)
     }
 
     // Check if public and cache file vary in size
-    const cacheFileStats = await stat(cachePath)
+    const cacheFileStats = await stat(activePath)
     const publicFileStats = await stat(publicPath)
 
     if (publicExists && cacheFileStats.size !== publicFileStats.size) {
-      await copy(cachePath, publicPath, { overwrite: true })
+      await copy(activePath, publicPath, { overwrite: true })
     }
 
     return { publicPath }
@@ -273,6 +304,7 @@ export default class FFMPEG {
     const { type } = video.internal
     const label = generateTaskLabel({ video, profileName: 'Screenshots' })
     let contentDigest = video.internal.contentDigest
+    const { name: parentName } = parse(video.base || video.file.fileName)
 
     let fileType = null
     if (type === `File`) {
@@ -315,23 +347,27 @@ export default class FFMPEG {
       timestamps,
       size: `${width}x?`,
     }
-    contentDigest = createContentDigest({ contentDigest, screenshotsOptions })
-    const cacheDir = resolve(this.cacheScreenshotsDir, contentDigest)
+    const foldername = `${parentName}-${contentDigest}-${createContentDigest({
+      screenshotsOptions,
+    })}`
     let screenshotPaths
 
-    try {
-      const screenshotNames = await readdir(cacheDir)
-      screenshotPaths = screenshotNames.map((name) => resolve(cacheDir, name))
+    const { cachePathActive, cachePathRolling } = this
+    const activePath = resolve(cachePathActive, 'screenshots', foldername)
+    const rollingPath = resolve(cachePathRolling, 'screenshots', foldername)
 
-      reporter.info(
-        `${label} - Restored ${screenshotPaths.length} ${width}px screenshots from cache`
-      )
+    try {
+      await this.restoreFromCache({
+        label,
+        activePath,
+        rollingPath,
+        reporter,
+      })
+
+      const screenshotNames = await readdir(activePath)
+      screenshotPaths = screenshotNames.map((name) => resolve(activePath, name))
     } catch (err) {
-      const tmpDir = resolve(
-        tmpdir(),
-        'gatsby-transformer-video',
-        contentDigest
-      )
+      const tmpDir = resolve(tmpdir(), 'gatsby-transformer-video', foldername)
       const screenshotsConfig: ScreenshotsConfig = {
         filename: `%ss.png`,
         folder: tmpDir,
@@ -365,6 +401,7 @@ export default class FFMPEG {
 
       // process raw screenshots and store to cache
       screenshotPaths = []
+      await ensureDir(activePath)
       for (const screenshotRawName of screenshotRawNames) {
         try {
           const screenshotRawPath = resolve(tmpDir, screenshotRawName)
@@ -383,8 +420,9 @@ export default class FFMPEG {
           })
 
           // Store to fs cache
-          await ensureDir(cacheDir)
-          const cachePath = resolve(cacheDir, screenshotRawName)
+          await ensureDir(this.cachePathActive)
+          const { name } = parse(screenshotRawName)
+          const cachePath = resolve(activePath, `${name}.jpg`)
           await writeFile(cachePath, optimizedBuffer)
           screenshotPaths.push(cachePath)
         } catch (err) {
