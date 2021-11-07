@@ -1,10 +1,8 @@
-import { resolve } from 'path'
-
+import commandExists from 'command-exists'
 import execa, { StdioOption } from 'execa'
 import { access, ensureDir } from 'fs-extra'
-import commandExists from 'command-exists'
-
 import reporter from 'gatsby-cli/lib/reporter'
+import { resolve } from 'path'
 
 export async function libsInstalled() {
   try {
