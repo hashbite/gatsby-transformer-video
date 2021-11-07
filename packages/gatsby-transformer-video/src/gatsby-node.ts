@@ -158,6 +158,7 @@ exports.createResolvers = async (
           store,
           cacheDirOriginal,
           reporter,
+          cache,
         })
 
         const videoData = await transformer({

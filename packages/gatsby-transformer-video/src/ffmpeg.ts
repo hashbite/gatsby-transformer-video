@@ -6,7 +6,7 @@ import ffmpeg, {
 } from 'fluent-ffmpeg'
 import { access, copy, ensureDir, pathExists, remove, stat } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
-import { createContentDigest } from 'gatsby-core-utils'
+import { createContentDigest, fetchRemoteFile } from 'gatsby-core-utils'
 import { createFileNodeFromBuffer } from 'gatsby-source-filesystem'
 import imagemin from 'imagemin'
 import imageminMozjpeg from 'imagemin-mozjpeg'
@@ -16,7 +16,7 @@ import { parse, resolve } from 'path'
 import { performance } from 'perf_hooks'
 import sharp from 'sharp'
 
-import { cacheContentfulVideo, generateTaskLabel } from './helpers'
+import { generateTaskLabel } from './helpers'
 import {
   ConvertVideoArgs,
   ConvertVideoResult,
@@ -89,19 +89,18 @@ export const executeFfmpeg = async ({
 }
 
 // Analyze video and download if neccessary
-interface AnalyzeVideoArgs extends Pick<NodePluginArgs, 'reporter'> {
+interface AnalyzeVideoArgs extends Pick<NodePluginArgs, 'reporter' | 'cache'> {
   video: VideoNode
   fieldArgs: DefaultTransformerFieldArgs
   type: string
   cacheDirOriginal: string
 }
 
-export const analyzeVideo = async ({
+export const analyzeAndFetchVideo = async ({
   video,
   fieldArgs,
   type,
-  cacheDirOriginal,
-  reporter,
+  cache,
 }: AnalyzeVideoArgs) => {
   let path
   let contentDigest = video.internal.contentDigest
@@ -111,17 +110,19 @@ export const analyzeVideo = async ({
   }
 
   if (type === `ContentfulAsset`) {
+    const { ext } = parse(video.file.fileName)
+
+    path = await fetchRemoteFile({
+      url: `https:${video.file.url}`,
+      cache,
+      ext,
+    })
+
     contentDigest = createContentDigest([
       video.contentful_id,
       video.file.url,
       video.file.details.size,
     ])
-    path = await cacheContentfulVideo({
-      video,
-      contentDigest,
-      cacheDir: cacheDirOriginal,
-      reporter,
-    })
   }
 
   if (!path) {
@@ -278,17 +279,19 @@ export default class FFMPEG {
     }
 
     if (type === `ContentfulAsset`) {
+      const { ext } = parse(video.file.fileName)
+
+      path = await fetchRemoteFile({
+        url: `https:${video.file.url}`,
+        cache,
+        ext,
+      })
+
       contentDigest = createContentDigest([
         video.contentful_id,
         video.file.url,
         video.file.details.size,
       ])
-      path = await cacheContentfulVideo({
-        video,
-        contentDigest,
-        cacheDir: this.cacheDirOriginal,
-        reporter,
-      })
     }
 
     const { timestamps, width } = fieldArgs
