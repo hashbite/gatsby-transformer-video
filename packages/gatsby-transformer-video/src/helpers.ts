@@ -1,10 +1,10 @@
+import axios from 'axios'
 import fs from 'fs'
 import { access } from 'fs-extra'
-import { resolve, extname } from 'path'
-
-import PQueue from 'p-queue'
-import axios from 'axios'
 import reporter from 'gatsby-cli/lib/reporter'
+import PQueue from 'p-queue'
+import { extname, resolve } from 'path'
+
 import { VideoNode } from './types'
 
 const downloadQueue = new PQueue({ concurrency: 3 })
