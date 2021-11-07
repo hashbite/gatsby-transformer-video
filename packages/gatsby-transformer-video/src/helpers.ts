@@ -227,3 +227,20 @@ export async function prepareAndAnalyzeVideo({
     info,
   }
 }
+
+interface GenerateTaskLabelArgs<T extends DefaultTransformerFieldArgs> {
+  video: VideoNode
+  profileName: string
+}
+
+export function generateTaskLabel({
+  video,
+  profileName,
+}: GenerateTaskLabelArgs<DefaultTransformerFieldArgs>) {
+  const { base, file, contentful_id, id } = video
+
+  const label = `Video ${base || file.fileName}:${contentful_id ||
+    id} (${profileName})`
+
+  return label
+}
