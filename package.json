@@ -3,7 +3,8 @@
   "scripts": {
     "postinstall": "npm run build-plugin && npm run clean-example",
     "build-plugin": "cd packages/gatsby-transformer-video && npm run build",
-    "clean-example": "cd packages/example && gatsby clean && rm -rf node_modules/.cache/gatsby-transformer-video"
+    "clean-example": "cd packages/example && gatsby clean && rm -rf node_modules/.cache/gatsby-transformer-video",
+    "format": "prettier --write '{/,packages/*/src/**/,packages/*/}*.{js,jsx,ts,tsx,json}'"
   },
   "workspaces": [
     "packages/*"
