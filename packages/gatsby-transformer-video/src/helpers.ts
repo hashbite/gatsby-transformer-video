@@ -66,7 +66,6 @@ interface prepareAndAnalyzeVideoArgs
   extends Pick<NodePluginArgs, 'store' | 'reporter' | 'cache'> {
   video: VideoNode
   fieldArgs: DefaultTransformerFieldArgs
-  cacheDirOriginal: string
 }
 
 // Get source videos metadata and download the file if required
@@ -74,7 +73,6 @@ export async function prepareAndAnalyzeVideo({
   video,
   fieldArgs,
   store,
-  cacheDirOriginal,
   reporter,
   cache,
 }: prepareAndAnalyzeVideoArgs) {
@@ -105,7 +103,6 @@ export async function prepareAndAnalyzeVideo({
     video,
     fieldArgs,
     type,
-    cacheDirOriginal,
     reporter,
     cache,
   })
@@ -140,9 +137,8 @@ export function generateTaskLabel({
 }: GenerateTaskLabelArgs<DefaultTransformerFieldArgs>) {
   const { base, file, contentful_id, id } = video
 
-  const label = `Video ${base || file.fileName}:${
-    contentful_id || id
-  } (${profileName})`
+  const label = `Video ${base || file.fileName}:${contentful_id ||
+    id} (${profileName})`
 
   return label
 }

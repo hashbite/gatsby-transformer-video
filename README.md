@@ -84,7 +84,7 @@ module.exports = {
         /**
          * Set if FFMPEG & FFPROBE should be downloaded if they are not found locally.
          *
-         * Downloaded binaries are stored in `node_modules/.cache/gatsby-transformer-video-bins/`
+         * Downloaded binaries are stored in `.bin/gatsby-transformer-video/`
          *
          * Default: true
          */

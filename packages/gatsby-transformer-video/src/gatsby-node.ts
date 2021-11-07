@@ -35,17 +35,13 @@ import {
 const platform = os.platform()
 const arch = os.arch()
 
+// @todo make configurable
 const CACHE_FOLDER_BIN = resolve(
-  `node_modules`,
-  `.cache`,
-  `gatsby-transformer-video-bin`,
+  `.bin`,
+  `gatsby-transformer-video`,
   `${platform}-${arch}`
 )
-const CACHE_FOLDER_VIDEOS = resolve(
-  `node_modules`,
-  `.cache`,
-  `gatsby-transformer-video`
-)
+const CACHE_FOLDER_VIDEOS = resolve(`.cache-video`)
 
 const DEFAULT_ARGS = {
   maxWidth: { type: GraphQLInt, defaultValue: 1920 },
@@ -113,32 +109,33 @@ exports.createResolvers = async (
 ) => {
   const program = store.getState().program
   const rootDir = program.directory
-  const cacheDirOriginal = resolve(rootDir, CACHE_FOLDER_VIDEOS, `original`)
-  const cacheDirConverted = resolve(rootDir, CACHE_FOLDER_VIDEOS, `converted`)
-
-  await ensureDir(cacheDirOriginal)
-  await ensureDir(cacheDirConverted)
 
   const alreadyInstalled = await libsInstalled()
 
   // Set paths to our own binaries
   if (!alreadyInstalled && downloadBinaries && (!ffmpegPath || !ffprobePath)) {
     ffmpegPath = resolve(
-      rootDir,
       CACHE_FOLDER_BIN,
       `ffmpeg${platform === `win32` ? `.exe` : ``}`
     )
     ffprobePath = resolve(
-      rootDir,
       CACHE_FOLDER_BIN,
       `ffprobe${platform === `win32` ? `.exe` : ``}`
     )
   }
+  const cacheDir = CACHE_FOLDER_VIDEOS
+  const cacheVideosDir = resolve(CACHE_FOLDER_VIDEOS, 'videos')
+  const cacheScreenshotsDir = resolve(CACHE_FOLDER_VIDEOS, 'screenshots')
+
+  // @todo move to init?
+  await ensureDir(cacheVideosDir)
+  await ensureDir(cacheScreenshotsDir)
 
   const ffmpeg = new FFMPEG({
     rootDir,
-    cacheDirOriginal,
-    cacheDirConverted,
+    cacheDir,
+    cacheVideosDir,
+    cacheScreenshotsDir,
     ffmpegPath,
     ffprobePath,
     profiles,
@@ -156,7 +153,6 @@ exports.createResolvers = async (
           video,
           fieldArgs,
           store,
-          cacheDirOriginal,
           reporter,
           cache,
         })
@@ -201,7 +197,7 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<H264TransformerFieldArgs>) => {
           const filename = `${name}-h264.mp4`
-          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const cachePath = resolve(cacheVideosDir, filename)
           const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
@@ -237,7 +233,7 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<H265TransformerFieldArgs>) => {
           const filename = `${name}-h265.mp4`
-          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const cachePath = resolve(cacheVideosDir, filename)
           const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
@@ -274,7 +270,7 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<VP9TransformerFieldArgs>) => {
           const filename = `${name}-vp9.webm`
-          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const cachePath = resolve(cacheVideosDir, filename)
           const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
@@ -306,7 +302,7 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
           const filename = `${name}-webp.webp`
-          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const cachePath = resolve(cacheVideosDir, filename)
           const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
@@ -338,7 +334,7 @@ exports.createResolvers = async (
           video,
         }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
           const filename = `${name}-gif.gif`
-          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const cachePath = resolve(cacheVideosDir, filename)
           const publicPath = resolve(publicDir, filename)
 
           const absolutePath = await ffmpeg.queueConvertVideo({
@@ -404,7 +400,7 @@ exports.createResolvers = async (
           }
 
           const filename = `${name}-${profileName}.${profile.extension}`
-          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const cachePath = resolve(cacheVideosDir, filename)
           const publicPath = resolve(publicDir, filename)
 
           return ffmpeg.queueConvertVideo({
