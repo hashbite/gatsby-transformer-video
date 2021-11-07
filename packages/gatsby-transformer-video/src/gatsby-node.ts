@@ -1,29 +1,36 @@
-import { resolve, parse } from 'path'
-import os from 'os'
-
+import { FfprobeData } from 'fluent-ffmpeg'
 import { ensureDir } from 'fs-extra'
-import { GraphQLString, GraphQLInt, GraphQLFloat } from 'gatsby/graphql'
-import reporter from 'gatsby-cli/lib/reporter'
-
-import FFMPEG from './ffmpeg'
-
-import { libsInstalled, libsAlreadyDownloaded, downloadLibs } from './binaries'
 import {
   CreateResolversArgs,
   CreateSchemaCustomizationArgs,
   ParentSpanPluginArgs,
 } from 'gatsby'
-
+import reporter from 'gatsby-cli/lib/reporter'
+import { GraphQLFloat, GraphQLInt, GraphQLString } from 'gatsby/graphql'
 import { ObjectTypeComposerFieldConfigMapDefinition } from 'graphql-compose'
+import imagemin from 'imagemin'
+import imageminGiflossy from 'imagemin-giflossy'
+import os from 'os'
+import { parse, resolve } from 'path'
 
+import { downloadLibs, libsAlreadyDownloaded, libsInstalled } from './binaries'
+import FFMPEG from './ffmpeg'
+import { profileGif } from './profiles/gif'
+import { profileH264 } from './profiles/h264'
+import { profileH265 } from './profiles/h265'
+import { profileVP9 } from './profiles/vp9'
+import { profileWebP } from './profiles/webp'
 import {
   DefaultTransformerFieldArgs,
   GatsbyTransformerVideoOptions,
-  VideoNode,
+  H264TransformerFieldArgs,
+  H265TransformerFieldArgs,
   ScreenshotTransformerFieldArgs,
   Transformer,
+  VideoNode,
+  VideoTransformerArgs,
+  VP9TransformerFieldArgs,
 } from './types'
-import { FfprobeData } from 'fluent-ffmpeg'
 
 const platform = os.platform()
 const arch = os.arch()
@@ -277,7 +284,26 @@ exports.createResolvers = async (
         bufSize: { type: GraphQLString },
       },
       resolve: transformVideo({
-        transformer: ffmpeg.createH264,
+        transformer: async ({
+          publicDir,
+          path,
+          name,
+          fieldArgs,
+          info,
+        }: VideoTransformerArgs<H264TransformerFieldArgs>) => {
+          const filename = `${name}-h264.mp4`
+          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const publicPath = resolve(publicDir, filename)
+
+          return ffmpeg.queueConvertVideo({
+            profile: profileH264,
+            sourcePath: path,
+            cachePath,
+            publicPath,
+            fieldArgs,
+            info,
+          })
+        },
       }),
     },
     videoH265: {
@@ -290,7 +316,26 @@ exports.createResolvers = async (
         bufSize: { type: GraphQLInt },
       },
       resolve: transformVideo({
-        transformer: ffmpeg.createH265,
+        transformer: async ({
+          publicDir,
+          path,
+          name,
+          fieldArgs,
+          info,
+        }: VideoTransformerArgs<H265TransformerFieldArgs>) => {
+          const filename = `${name}-h265.mp4`
+          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const publicPath = resolve(publicDir, filename)
+
+          return ffmpeg.queueConvertVideo({
+            profile: profileH265,
+            sourcePath: path,
+            cachePath,
+            publicPath,
+            fieldArgs,
+            info,
+          })
+        },
       }),
     },
     videoVP9: {
@@ -304,7 +349,26 @@ exports.createResolvers = async (
         cpuUsed: { type: GraphQLInt, defaultValue: 1 },
       },
       resolve: transformVideo({
-        transformer: ffmpeg.createVP9,
+        transformer: async ({
+          publicDir,
+          path,
+          name,
+          fieldArgs,
+          info,
+        }: VideoTransformerArgs<VP9TransformerFieldArgs>) => {
+          const filename = `${name}-vp9.webm`
+          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const publicPath = resolve(publicDir, filename)
+
+          return ffmpeg.queueConvertVideo({
+            profile: profileVP9,
+            sourcePath: path,
+            cachePath,
+            publicPath,
+            fieldArgs,
+            info,
+          })
+        },
       }),
     },
     videoWebP: {
@@ -313,7 +377,26 @@ exports.createResolvers = async (
         ...DEFAULT_ARGS,
       },
       resolve: transformVideo({
-        transformer: ffmpeg.createWebP,
+        transformer: async ({
+          publicDir,
+          path,
+          name,
+          fieldArgs,
+          info,
+        }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
+          const filename = `${name}-webp.webp`
+          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const publicPath = resolve(publicDir, filename)
+
+          return ffmpeg.queueConvertVideo({
+            profile: profileWebP,
+            sourcePath: path,
+            cachePath,
+            publicPath,
+            fieldArgs,
+            info,
+          })
+        },
       }),
     },
     videoGif: {
@@ -322,7 +405,40 @@ exports.createResolvers = async (
         ...DEFAULT_ARGS,
       },
       resolve: transformVideo({
-        transformer: ffmpeg.createGif,
+        transformer: async ({
+          publicDir,
+          path,
+          name,
+          fieldArgs,
+          info,
+        }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
+          const filename = `${name}-gif.gif`
+          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const publicPath = resolve(publicDir, filename)
+
+          const absolutePath = await ffmpeg.queueConvertVideo({
+            profile: profileGif,
+            sourcePath: path,
+            cachePath,
+            publicPath,
+            fieldArgs,
+            info,
+          })
+
+          await imagemin([publicPath], {
+            destination: publicDir,
+            plugins: [
+              imageminGiflossy({
+                optimizationLevel: 3,
+                lossy: 120,
+                noLogicalScreen: true,
+                optimize: `3`,
+              }),
+            ],
+          })
+
+          return absolutePath
+        },
       }),
     },
     videoProfile: {
@@ -332,7 +448,45 @@ exports.createResolvers = async (
         ...DEFAULT_ARGS,
       },
       resolve: transformVideo({
-        transformer: ffmpeg.createFromProfile,
+        transformer: async ({
+          publicDir,
+          path,
+          name,
+          fieldArgs,
+          info,
+        }: VideoTransformerArgs<any>) => {
+          const profileName = fieldArgs.profile
+          const profile = ffmpeg.profiles[profileName]
+
+          if (!profile) {
+            throw new Error(`Unable to locate FFMPEG profile ${profileName}`)
+          }
+
+          if (!profile.extension) {
+            throw new Error(
+              `FFMPEG profile ${profileName} has no extension specified`
+            )
+          }
+
+          if (!profile.converter) {
+            throw new Error(
+              `FFMPEG profile ${profileName} has no converter function specified`
+            )
+          }
+
+          const filename = `${name}-${profileName}.${profile.extension}`
+          const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
+          const publicPath = resolve(publicDir, filename)
+
+          return ffmpeg.queueConvertVideo({
+            profile: profile.converter,
+            sourcePath: path,
+            cachePath,
+            publicPath,
+            fieldArgs,
+            info,
+          })
+        },
       }),
     },
     videoScreenshots: {
