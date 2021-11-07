@@ -302,7 +302,7 @@ export default class FFMPEG {
       (resolve, reject) => {
         let paths: string[]
         ffmpeg(path)
-          .on(`filenames`, function(filenames) {
+          .on(`filenames`, function (filenames) {
             paths = filenames
             reporter.info(
               `${name} - Taking ${filenames.length} ${width}px screenshots`

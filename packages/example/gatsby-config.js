@@ -27,7 +27,7 @@ module.exports = {
         profiles: {
           sepia: {
             extension: `mp4`,
-            converter: function({ ffmpegSession, videoStreamMetadata }) {
+            converter: function ({ ffmpegSession, videoStreamMetadata }) {
               const { currentFps } = videoStreamMetadata
 
               const outputOptions = [
