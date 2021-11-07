@@ -4,7 +4,6 @@ import {
   CreateSchemaCustomizationArgs,
   ParentSpanPluginArgs,
 } from 'gatsby'
-import reporter from 'gatsby-cli/lib/reporter'
 import { GraphQLFloat, GraphQLInt, GraphQLString } from 'gatsby/graphql'
 import { ObjectTypeComposerFieldConfigMapDefinition } from 'graphql-compose'
 import imagemin from 'imagemin'
@@ -102,6 +101,7 @@ exports.createResolvers = async (
     cache,
     createNodeId,
     getNode,
+    reporter,
     actions: { createNode },
   }: CreateResolversArgs,
   {
@@ -157,6 +157,7 @@ exports.createResolvers = async (
           fieldArgs,
           store,
           cacheDirOriginal,
+          reporter,
         })
 
         const videoData = await transformer({
@@ -167,7 +168,7 @@ exports.createResolvers = async (
           info,
         })
 
-        return await processResult(videoData, { store })
+        return await processResult(videoData, { store, reporter })
       } catch (err) {
         if (!(err instanceof WrongFileTypeError)) {
           throw err
@@ -207,6 +208,7 @@ exports.createResolvers = async (
             publicPath,
             fieldArgs,
             info,
+            reporter,
           })
         },
       }),
@@ -239,6 +241,7 @@ exports.createResolvers = async (
             publicPath,
             fieldArgs,
             info,
+            reporter,
           })
         },
       }),
@@ -272,6 +275,7 @@ exports.createResolvers = async (
             publicPath,
             fieldArgs,
             info,
+            reporter,
           })
         },
       }),
@@ -300,6 +304,7 @@ exports.createResolvers = async (
             publicPath,
             fieldArgs,
             info,
+            reporter,
           })
         },
       }),
@@ -328,6 +333,7 @@ exports.createResolvers = async (
             publicPath,
             fieldArgs,
             info,
+            reporter,
           })
 
           await imagemin([publicPath], {
@@ -390,6 +396,7 @@ exports.createResolvers = async (
             publicPath,
             fieldArgs,
             info,
+            reporter,
           })
         },
       }),
@@ -411,6 +418,7 @@ exports.createResolvers = async (
           createNode,
           createNodeId,
           store,
+          reporter,
         })
       },
     },
@@ -425,7 +433,7 @@ exports.createResolvers = async (
 
 // Download FFMPEG & FFPROBE binaries if they are not available.
 exports.onPreInit = async (
-  { store }: ParentSpanPluginArgs,
+  { store, reporter }: ParentSpanPluginArgs,
   { downloadBinaries = true }
 ) => {
   if (!downloadBinaries) {
@@ -453,7 +461,7 @@ exports.onPreInit = async (
     try {
       reporter.info(`FFMPEG & FFPROBE getting binaries for ${platform}@${arch}`)
 
-      await downloadLibs({ binariesDir, platform })
+      await downloadLibs({ binariesDir, platform, reporter })
 
       reporter.info(
         `Finished. This system is ready to convert videos with GatsbyJS`

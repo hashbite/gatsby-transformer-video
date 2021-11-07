@@ -5,7 +5,7 @@ import ffmpeg, {
   ScreenshotsConfig,
 } from 'fluent-ffmpeg'
 import { access, copy, ensureDir, pathExists, remove, stat } from 'fs-extra'
-import reporter from 'gatsby-cli/lib/reporter'
+import { NodePluginArgs } from 'gatsby'
 import { createContentDigest } from 'gatsby-core-utils'
 import { createFileNodeFromBuffer } from 'gatsby-source-filesystem'
 import imagemin from 'imagemin'
@@ -36,15 +36,17 @@ export const executeFfprobe = (path: string): Promise<FfprobeData> =>
       resolve(data)
     })
   })
+interface ExecuteFfmpegArgs extends Pick<NodePluginArgs, 'reporter'> {
+  ffmpegSession: ffmpeg.FfmpegCommand
+  cachePath: string
+}
 
 // Execute FFMMPEG and log progress
 export const executeFfmpeg = async ({
   ffmpegSession,
   cachePath,
-}: {
-  ffmpegSession: ffmpeg.FfmpegCommand
-  cachePath: string
-}) => {
+  reporter,
+}: ExecuteFfmpegArgs) => {
   let startTime: number
   let lastLoggedPercent = 0.1
 
@@ -54,7 +56,7 @@ export const executeFfmpeg = async ({
     ffmpegSession
       .on(`start`, (commandLine) => {
         reporter.info(`${name} - converting`)
-        reporter.verbose(`${name} - executing:\n\n${commandLine}\n`)
+        reporter.info(`${name} - executing:\n\n${commandLine}\n`)
         startTime = performance.now()
       })
       .on(`progress`, (progress) => {
@@ -85,17 +87,20 @@ export const executeFfmpeg = async ({
 }
 
 // Analyze video and download if neccessary
+interface AnalyzeVideoArgs extends Pick<NodePluginArgs, 'reporter'> {
+  video: VideoNode
+  fieldArgs: DefaultTransformerFieldArgs
+  type: string
+  cacheDirOriginal: string
+}
+
 export const analyzeVideo = async ({
   video,
   fieldArgs,
   type,
   cacheDirOriginal,
-}: {
-  video: VideoNode
-  fieldArgs: DefaultTransformerFieldArgs
-  type: string
-  cacheDirOriginal: string
-}) => {
+  reporter,
+}: AnalyzeVideoArgs) => {
   let path
   let contentDigest = video.internal.contentDigest
 
@@ -113,6 +118,7 @@ export const analyzeVideo = async ({
       video,
       contentDigest,
       cacheDir: cacheDirOriginal,
+      reporter,
     })
   }
 
@@ -177,6 +183,7 @@ export default class FFMPEG {
     publicPath,
     fieldArgs,
     info,
+    reporter,
   }: ConvertVideoArgs<T>): Promise<ConvertVideoResult> => {
     const alreadyExists = await pathExists(cachePath)
 
@@ -196,7 +203,7 @@ export default class FFMPEG {
       })
 
       this.enhanceFfmpegForFilters({ ffmpegSession, fieldArgs })
-      await executeFfmpeg({ ffmpegSession, cachePath })
+      await executeFfmpeg({ ffmpegSession, cachePath, reporter })
     }
 
     // If public file does not exist, copy cached file
@@ -233,6 +240,7 @@ export default class FFMPEG {
       cache,
       getNode,
       store,
+      reporter,
     }: ScreenshotTransformerHelpers
   ) => {
     const { type } = video.internal
@@ -268,6 +276,7 @@ export default class FFMPEG {
         video,
         contentDigest,
         cacheDir: this.cacheDirOriginal,
+        reporter,
       })
     }
 
@@ -289,7 +298,6 @@ export default class FFMPEG {
       const cachedScreenshots = cachedScreenshotIds.map((id) => getNode(id))
 
       if (cachedScreenshots.every((node) => typeof node !== 'undefined')) {
-        reporter.verbose(`Returning cached screenshots`)
         return cachedScreenshots
       }
     }
@@ -300,7 +308,7 @@ export default class FFMPEG {
       (resolve, reject) => {
         let paths: string[]
         ffmpeg(path)
-          .on(`filenames`, function (filenames) {
+          .on(`filenames`, function(filenames) {
             paths = filenames
             reporter.info(
               `${name} - Taking ${filenames.length} ${width}px screenshots`
