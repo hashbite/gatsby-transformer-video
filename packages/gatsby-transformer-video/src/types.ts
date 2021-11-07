@@ -1,46 +1,13 @@
 import { FfmpegCommand, FfprobeData, FfprobeStream } from 'fluent-ffmpeg'
 import { Actions, NodePluginArgs } from 'gatsby'
 
-export interface VideoStreamMetadata {
-  videoStream: FfprobeStream
-  currentFps: number
-}
-
-export type Profile<T extends DefaultTransformerFieldArgs> = (args: {
-  fieldArgs: T
-  ffmpegSession: FfmpegCommand
-  filters: string[]
-  videoStreamMetadata: VideoStreamMetadata
-}) => FfmpegCommand
-
-export interface ConvertVideoResult {
-  publicPath: string
-}
-
-export type Transformer<T extends DefaultTransformerFieldArgs> = (
-  args: VideoTransformerArgs<T>
-) => Promise<ConvertVideoResult>
-
-export interface ProfileConfig<T extends DefaultTransformerFieldArgs> {
-  extension: string
-  converter: Profile<T>
-}
-export interface ConvertVideoArgs<T extends DefaultTransformerFieldArgs>
-  extends Pick<NodePluginArgs, 'reporter'> {
-  profile: Profile<T>
-  sourcePath: string
-  cachePath: string
-  publicPath: string
-  fieldArgs: T
-  info: FfprobeData
-}
-
 export interface VideoNode {
   internal: VideoNodeInternal
   id: string
   absolutePath: string
   file: VideoNodeContentfulFile
   contentful_id: string
+  base?: string
 }
 
 interface VideoNodeInternal {
@@ -57,6 +24,37 @@ interface VideoNodeContentfulFile {
 interface VideoNodeContentfulFileDetails {
   size: string
 }
+export interface VideoStreamMetadata {
+  videoStream: FfprobeStream
+  currentFps: number
+}
+
+export interface ConvertVideoResult {
+  publicPath: string
+}
+
+export type Profile<T extends DefaultTransformerFieldArgs> = (args: {
+  fieldArgs: T
+  ffmpegSession: FfmpegCommand
+  filters: string[]
+  videoStreamMetadata: VideoStreamMetadata
+}) => FfmpegCommand
+
+export interface ProfileConfig<T extends DefaultTransformerFieldArgs> {
+  extension: string
+  converter: Profile<T>
+}
+export interface ConvertVideoArgs<T extends DefaultTransformerFieldArgs>
+  extends Pick<NodePluginArgs, 'reporter'> {
+  profile: Profile<T>
+  profileName: string
+  sourcePath: string
+  cachePath: string
+  publicPath: string
+  fieldArgs: T
+  info: FfprobeData
+  video: VideoNode
+}
 
 export interface GatsbyTransformerVideoOptions {
   ffmpegPath: string
@@ -65,7 +63,12 @@ export interface GatsbyTransformerVideoOptions {
   profiles: Record<string, ProfileConfig<DefaultTransformerFieldArgs>>
 }
 
+export type Transformer<T extends DefaultTransformerFieldArgs> = (
+  args: VideoTransformerArgs<T>
+) => Promise<ConvertVideoResult>
+
 export interface VideoTransformerArgs<T extends DefaultTransformerFieldArgs> {
+  video: VideoNode
   publicDir: string
   path: string
   name: string

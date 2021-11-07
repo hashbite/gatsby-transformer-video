@@ -16,7 +16,7 @@ import { parse, resolve } from 'path'
 import { performance } from 'perf_hooks'
 import sharp from 'sharp'
 
-import { cacheContentfulVideo } from './helpers'
+import { cacheContentfulVideo, generateTaskLabel } from './helpers'
 import {
   ConvertVideoArgs,
   ConvertVideoResult,
@@ -39,6 +39,8 @@ export const executeFfprobe = (path: string): Promise<FfprobeData> =>
 interface ExecuteFfmpegArgs extends Pick<NodePluginArgs, 'reporter'> {
   ffmpegSession: ffmpeg.FfmpegCommand
   cachePath: string
+  video: VideoNode
+  profileName: string
 }
 
 // Execute FFMMPEG and log progress
@@ -46,17 +48,17 @@ export const executeFfmpeg = async ({
   ffmpegSession,
   cachePath,
   reporter,
+  video,
+  profileName,
 }: ExecuteFfmpegArgs) => {
   let startTime: number
   let lastLoggedPercent = 0.1
-
-  const { name } = parse(cachePath)
+  const label = generateTaskLabel({ video, profileName })
 
   return new Promise<void>((resolve, reject) => {
     ffmpegSession
       .on(`start`, (commandLine) => {
-        reporter.info(`${name} - converting`)
-        reporter.info(`${name} - executing:\n\n${commandLine}\n`)
+        reporter.info(`${label} - Executing:\n\n${commandLine}\n`)
         startTime = performance.now()
       })
       .on(`progress`, (progress) => {
@@ -68,18 +70,18 @@ export const executeFfmpeg = async ({
           const loggedTimeLeft =
             estTimeLeft !== Infinity && ` (~${estTimeLeft}s)`
 
-          reporter.info(`${name} - ${percent}%${loggedTimeLeft}`)
+          reporter.info(`${label} - ${percent}%${loggedTimeLeft}`)
           lastLoggedPercent = progress.percent
         }
       })
       .on(`error`, (err, stdout, stderr) => {
         reporter.info(`\n---\n${stdout}\n\n${stderr}\n---\n`)
-        reporter.info(`${name} - An error occurred:`)
+        reporter.info(`${label} - An error occurred:`)
         console.error(err)
         reject(err)
       })
       .on(`end`, () => {
-        reporter.info(`${name} - converted`)
+        reporter.info(`${label} - Conversion finished`)
         resolve()
       })
       .save(cachePath)
@@ -178,12 +180,14 @@ export default class FFMPEG {
   // Converts a video based on a given profile, populates cache and public dir
   convertVideo = async <T extends DefaultTransformerFieldArgs>({
     profile,
+    profileName,
     sourcePath,
     cachePath,
     publicPath,
     fieldArgs,
     info,
     reporter,
+    video,
   }: ConvertVideoArgs<T>): Promise<ConvertVideoResult> => {
     const alreadyExists = await pathExists(cachePath)
 
@@ -203,7 +207,13 @@ export default class FFMPEG {
       })
 
       this.enhanceFfmpegForFilters({ ffmpegSession, fieldArgs })
-      await executeFfmpeg({ ffmpegSession, cachePath, reporter })
+      await executeFfmpeg({
+        ffmpegSession,
+        cachePath,
+        reporter,
+        video,
+        profileName,
+      })
     }
 
     // If public file does not exist, copy cached file
@@ -244,6 +254,7 @@ export default class FFMPEG {
     }: ScreenshotTransformerHelpers
   ) => {
     const { type } = video.internal
+    const label = generateTaskLabel({ video, profileName: 'Screenshots' })
     let contentDigest = video.internal.contentDigest
 
     let fileType = null
@@ -311,11 +322,11 @@ export default class FFMPEG {
           .on(`filenames`, function(filenames) {
             paths = filenames
             reporter.info(
-              `${name} - Taking ${filenames.length} ${width}px screenshots`
+              `${label} - Taking ${filenames.length} ${width}px screenshots`
             )
           })
           .on(`error`, (err, stdout, stderr) => {
-            reporter.info(`${name} - Failed to take ${width}px screenshots:`)
+            reporter.info(`${label} - Failed to take ${width}px screenshots:`)
             console.error(err)
             reject(err)
           })
@@ -364,7 +375,7 @@ export default class FFMPEG {
 
         screenshotNodes.push(node)
       } catch (err) {
-        reporter.info(`${name} - failed to take screenshots:`)
+        reporter.info(`${label} - Failed to take screenshots:`)
         console.error(err)
         throw err
       }
@@ -376,6 +387,10 @@ export default class FFMPEG {
     // Store to cache
     const screenshotIds = screenshotNodes.map(({ id }) => id)
     await cache.set(cacheKey, screenshotIds)
+
+    reporter.info(
+      `${label} - Took ${screenshotNodes.length} ${width}px screenshots`
+    )
 
     return screenshotNodes
   }

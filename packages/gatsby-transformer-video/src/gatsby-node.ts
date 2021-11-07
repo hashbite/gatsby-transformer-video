@@ -161,6 +161,7 @@ exports.createResolvers = async (
         })
 
         const videoData = await transformer({
+          video,
           publicDir,
           path,
           name,
@@ -196,6 +197,7 @@ exports.createResolvers = async (
           name,
           fieldArgs,
           info,
+          video,
         }: VideoTransformerArgs<H264TransformerFieldArgs>) => {
           const filename = `${name}-h264.mp4`
           const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
@@ -203,12 +205,14 @@ exports.createResolvers = async (
 
           return ffmpeg.queueConvertVideo({
             profile: profileH264,
+            profileName: 'H264',
             sourcePath: path,
             cachePath,
             publicPath,
             fieldArgs,
             info,
             reporter,
+            video,
           })
         },
       }),
@@ -229,6 +233,7 @@ exports.createResolvers = async (
           name,
           fieldArgs,
           info,
+          video,
         }: VideoTransformerArgs<H265TransformerFieldArgs>) => {
           const filename = `${name}-h265.mp4`
           const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
@@ -236,12 +241,14 @@ exports.createResolvers = async (
 
           return ffmpeg.queueConvertVideo({
             profile: profileH265,
+            profileName: 'H265',
             sourcePath: path,
             cachePath,
             publicPath,
             fieldArgs,
             info,
             reporter,
+            video,
           })
         },
       }),
@@ -263,6 +270,7 @@ exports.createResolvers = async (
           name,
           fieldArgs,
           info,
+          video,
         }: VideoTransformerArgs<VP9TransformerFieldArgs>) => {
           const filename = `${name}-vp9.webm`
           const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
@@ -270,12 +278,14 @@ exports.createResolvers = async (
 
           return ffmpeg.queueConvertVideo({
             profile: profileVP9,
+            profileName: 'VP9',
             sourcePath: path,
             cachePath,
             publicPath,
             fieldArgs,
             info,
             reporter,
+            video,
           })
         },
       }),
@@ -292,6 +302,7 @@ exports.createResolvers = async (
           name,
           fieldArgs,
           info,
+          video,
         }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
           const filename = `${name}-webp.webp`
           const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
@@ -299,12 +310,14 @@ exports.createResolvers = async (
 
           return ffmpeg.queueConvertVideo({
             profile: profileWebP,
+            profileName: 'WebP',
             sourcePath: path,
             cachePath,
             publicPath,
             fieldArgs,
             info,
             reporter,
+            video,
           })
         },
       }),
@@ -321,6 +334,7 @@ exports.createResolvers = async (
           name,
           fieldArgs,
           info,
+          video,
         }: VideoTransformerArgs<DefaultTransformerFieldArgs>) => {
           const filename = `${name}-gif.gif`
           const cachePath = resolve(ffmpeg.cacheDirConverted, filename)
@@ -328,12 +342,14 @@ exports.createResolvers = async (
 
           const absolutePath = await ffmpeg.queueConvertVideo({
             profile: profileGif,
+            profileName: 'Gif',
             sourcePath: path,
             cachePath,
             publicPath,
             fieldArgs,
             info,
             reporter,
+            video,
           })
 
           await imagemin([publicPath], {
@@ -365,6 +381,7 @@ exports.createResolvers = async (
           name,
           fieldArgs,
           info,
+          video,
         }: VideoTransformerArgs<any>) => {
           const profileName = fieldArgs.profile
           const profile = ffmpeg.profiles[profileName]
@@ -391,12 +408,14 @@ exports.createResolvers = async (
 
           return ffmpeg.queueConvertVideo({
             profile: profile.converter,
+            profileName: `Custom profile: ${profileName}`,
             sourcePath: path,
             cachePath,
             publicPath,
             fieldArgs,
             info,
             reporter,
+            video,
           })
         },
       }),
