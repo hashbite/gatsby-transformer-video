@@ -442,9 +442,12 @@ export default class FFMPEG {
     const screenshotNodes = []
     for (const screenshotPath of screenshotPaths) {
       const screenshotBuffer = await readFile(screenshotPath)
+      const { name } = parse(screenshotPath)
+
       // read file to buffer screenshotPath
       const node = await createFileNodeFromBuffer({
         ext: `.jpg`,
+        name,
         buffer: screenshotBuffer,
         cache,
         store,

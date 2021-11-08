@@ -109,6 +109,9 @@ exports.createResolvers = async (
     cacheDirectoryBin,
   })
 
+  // Support for PRESERVE_FILE_DOWNLOAD_CACHE flag
+  cache.directory = '.cache/caches/gatsby-source-filesystem'
+
   // Set paths to our own binaries
   if (!alreadyInstalled && downloadBinaries && (!ffmpegPath || !ffprobePath)) {
     ffmpegPath = resolve(
