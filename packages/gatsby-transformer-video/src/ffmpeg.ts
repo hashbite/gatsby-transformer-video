@@ -7,15 +7,15 @@ import ffmpeg, {
 import {
   copy,
   ensureDir,
+  move,
   pathExists,
   readdir,
   readFile,
   stat,
   writeFile,
-  move,
 } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
-import { createContentDigest, fetchRemoteFile } from 'gatsby-core-utils'
+import { createContentDigest } from 'gatsby-core-utils'
 import { createFileNodeFromBuffer } from 'gatsby-source-filesystem'
 import imagemin from 'imagemin'
 import imageminMozjpeg from 'imagemin-mozjpeg'
@@ -25,7 +25,7 @@ import { parse, resolve } from 'path'
 import { performance } from 'perf_hooks'
 import sharp from 'sharp'
 
-import { generateTaskLabel } from './helpers'
+import { generateTaskLabel, queueFetchRemoteFile } from './helpers'
 import {
   ConvertVideoArgs,
   ConvertVideoResult,
@@ -122,7 +122,7 @@ export const analyzeAndFetchVideo = async ({
   if (type === `ContentfulAsset`) {
     const { ext } = parse(video.file.fileName)
 
-    path = await fetchRemoteFile({
+    path = await queueFetchRemoteFile({
       url: `https:${video.file.url}`,
       cache,
       ext,
@@ -329,7 +329,7 @@ export default class FFMPEG {
     if (type === `ContentfulAsset`) {
       const { ext } = parse(video.file.fileName)
 
-      path = await fetchRemoteFile({
+      path = await queueFetchRemoteFile({
         url: `https:${video.file.url}`,
         cache,
         ext,

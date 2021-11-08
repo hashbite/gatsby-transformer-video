@@ -1,4 +1,4 @@
-import { ensureDir, move, pathExists, remove, rmdir } from 'fs-extra'
+import { move, pathExists, remove } from 'fs-extra'
 import {
   CreateResolversArgs,
   CreateSchemaCustomizationArgs,
@@ -12,7 +12,7 @@ import { resolve } from 'path'
 
 import { downloadLibs, libsAlreadyDownloaded, libsInstalled } from './binaries'
 import FFMPEG from './ffmpeg'
-import { prepareAndAnalyzeVideo, processResult, getCacheDirs } from './helpers'
+import { getCacheDirs, prepareAndAnalyzeVideo, processResult } from './helpers'
 import { profileGif } from './profiles/gif'
 import { profileH264 } from './profiles/h264'
 import { profileH265 } from './profiles/h265'

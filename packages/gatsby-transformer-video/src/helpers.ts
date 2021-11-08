@@ -1,8 +1,10 @@
 import { FfprobeData } from 'fluent-ffmpeg'
 import { ensureDir } from 'fs-extra'
 import { NodePluginArgs } from 'gatsby'
-import { parse, resolve } from 'path'
+import { fetchRemoteFile, IFetchRemoteFileOptions } from 'gatsby-core-utils'
 import { arch, platform } from 'os'
+import PQueue from 'p-queue'
+import { parse, resolve } from 'path'
 
 import { analyzeAndFetchVideo, executeFfprobe } from './ffmpeg'
 import {
@@ -154,4 +156,10 @@ export function getCacheDirs({
   const cachePathRolling = resolve(`${cacheDirectory}-rolling`)
 
   return { cachePathBin, cachePathActive, cachePathRolling }
+}
+
+// Queue file for downloading till fetchRemoteFile supports queing
+const queueDownload = new PQueue({ concurrency: 5 })
+export async function queueFetchRemoteFile(fetchData: IFetchRemoteFileOptions) {
+  return queueDownload.add(() => fetchRemoteFile(fetchData))
 }
