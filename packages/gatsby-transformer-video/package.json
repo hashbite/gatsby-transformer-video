@@ -25,6 +25,11 @@
   "publishConfig": {
     "access": "public"
   },
+  "files": [
+    "dist",
+    "gatsby-node.js",
+    "index.js"
+  ],
   "license": "MIT",
   "dependencies": {
     "command-exists": "^1.2.9",
