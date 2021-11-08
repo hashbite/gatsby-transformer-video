@@ -39,7 +39,8 @@
     "imagemin": "^7.0.1",
     "imagemin-giflossy": "^5.1.10",
     "imagemin-mozjpeg": "^9.0.0",
-    "p-queue": "^6.6.2"
+    "p-queue": "^6.6.2",
+    "p-retry": "4.6.1"
   },
   "devDependencies": {
     "@babel/cli": "^7.16.0",
