@@ -7,7 +7,7 @@
 [![Github Check Badge](https://badgen.net/github/checks/hashbite/gatsby-transformer-video/main)](https://github.com/hashbite/gatsby-transformer-video/actions)
 [![License Badge](https://badgen.net/npm/license/gatsby-transformer-video)](https://github.com/hashbite/gatsby-transformer-video/blob/main/LICENSE)
 
-**This is a beta plugin and supports Gatsby v2 and v3. The videos will work fine on your website, but the implementation code still needs some love.**
+**This is a beta plugin and supports Gatsby v3 and v4. The videos will work fine on your website, we are working hard on improving the implementation code and to provide new features.**
 
 :warning::warning::warning: Converting videos might take a lot of time. Make sure to have an effective caching mechanism in place. See [caching](#caching)
 
@@ -27,12 +27,12 @@ https://github.com/hashbite/gatsby-transformer-video/tree/main/packages/example
 ## Installation
 
 ```sh
-npm i gatsby-transformer-video
+npm i gatsby-transformer-video gatsby-plugin-sharp gatsby-source-filesystem
 ```
 
 ## Prerequisites
 
-To properly convert and analyze videos, this relies on `ffmpeg` and `ffprobe`. If these are not available for your node process, they will be **downloaded automatically**.
+To properly convert and analyze videos, this relies on `ffmpeg` and `ffprobe`. If these are not available for your node process, they will be **downloaded automatically** and cached to your disk.
 
 If you want to use your own version of `ffmpeg` and `ffprobe`, it should be compiled with at least the following flags enabled:
 
@@ -67,7 +67,7 @@ brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-fdk-aac --with-webp
 
 ## Usage
 
-### config @ `gatsby-config.js`
+### Configuration via `gatsby-config.js`
 
 The plugin works fine in most cases without any configuration options set.
 
@@ -82,15 +82,28 @@ module.exports = {
       resolve: `gatsby-transformer-video`,
       options: {
         /**
-         * Set if FFMPEG & FFPROBE should be downloaded if they are not found locally.
+         * Alternative directory for the video cache
+         * Default: '.cache-video'
+         */
+        cacheDirectory: resolve('node_modules', '.cache-video'),
+
+        /**
+         * Alternative directory for the ffmpeg binaries
+         * Default: resolve(`.bin`, `gatsby-transformer-video`)
+         */
+        cacheDirectoryBin: resolve('node_modules', '.cache-video-bin'),
+
+        /**
+         * Set if FFMPEG & FFPROBE should be downloaded if they are not found locally
          *
          * Downloaded binaries are stored in `.bin/gatsby-transformer-video/`
          *
          * Default: true
          */
         downloadBinaries: false,
+
         /**
-         * Optional: Pass your own binaries
+         * Pass your own FFMPEG && FFPROBE binaries
          *
          * Assumes you store your binaries in the following pattern:
          * ./bin/darwin/ffmpeg
@@ -104,13 +117,17 @@ module.exports = {
         ffmpegPath: resolve(__dirname, 'bin', platform(), 'ffmpeg'),
         ffprobePath: resolve(__dirname, 'bin', platform(), 'ffprobe'),
 
-        // Optional profiles for full fluent-ffmpeg access
+        /**
+         * Define custom profiles to convert videos with full fluent-ffmpeg access
+         *
+         * Learn more: https://github.com/fluent-ffmpeg/node-fluent-ffmpeg
+         */
         profiles: {
           sepia: {
             extension: `mp4`,
             converter: function({ ffmpegSession, videoStreamMetadata }) {
               // Example:
-              // https://github.com/hashbite/gatsby-transformer-video/blob/packages/example/gatsby-config.js
+              // https://github.com/hashbite/gatsby-transformer-video/blob/main/packages/example/gatsby-config.js#L24-L55
             },
           },
         },
@@ -121,6 +138,8 @@ module.exports = {
 ```
 
 ### GraphQL Query
+
+Check out your GraphiQL interface for all available options: http://localhost:8000/___graphql
 
 ```graphql
 query {
@@ -142,14 +161,15 @@ query {
           absolutePath #String
           name #String
           ext #String
-          codec #String
           formatName #String
           formatLongName #String
           startTime #Float
           duration #Float
           size #Int
           bitRate #Int
-          screenshots #String
+          width #Int
+          height #Int
+          aspectRatio #Float
         }
         videoProfile(profile: "yourProfileName") {
           path
@@ -167,22 +187,40 @@ query {
 }
 ```
 
-### Rendering
+### Rendering your videos
 
-- Pain implementation: https://github.com/hashbite/gatsby-transformer-video/blob/main/packages/example/src/pages/index.js
+- Plain implementation: https://github.com/hashbite/gatsby-transformer-video/blob/main/packages/example/src/pages/index.tsx
 - We plan to prove a component for this: https://github.com/hashbite/gatsby-transformer-video/issues/8
 
 ## Caching
 
 Generating videos take time. A lot. You should cache your results. Otherwise, you might not even be able to publish on your hosting platform.
 
-This plugin stores all converted files in `node_modules/.cache/gatsby-transformer-video/`
+Our `Rolling Cache` implementation will avoid extra video conversions even when you clear your GatsbyJS cache. The cache will be regenerated regularly to ensure stale files are removed from the cache.
 
-[We plan to improve the caching behavior](https://github.com/hashbite/gatsby-transformer-video/issues/6)
+You need to cache the `cacheDirectory` to make this work. Consider cachine the `cacheDirectoryBin` directory if your build platform does not provide FFMPEG & FFPROBE.
 
-Here is a list of plugins that can help you:
+### Building your website on Gatsby Cloud, Netlify and others
+
+If your build setup does not allow you to cache additional folders, you can abuse their caching of the `node_modules` folder. To do so, tell the cache to store files in `node_modules` via  `cacheDirectory` and `cacheDirectoryBin`:
+
+```js
+const { resolve } = require(`path`)
+const { platform } = require(`os`)
+module.exports = {
+  plugins: [
+    {
+      resolve: `gatsby-transformer-video`,
+      options: {
+        cacheDirectory: resolve('node_modules', '.cache-video'),
+        cacheDirectoryBin: resolve('node_modules', '.cache-video-bin'),
+      },
+    },
+  ],
+}
+```
+
+### Plugins that might help with caching:
 
 - Netlify: https://www.gatsbyjs.org/packages/gatsby-plugin-netlify-cache/
 - Via SFTP: https://www.gatsbyjs.org/packages/gatsby-plugin-sftp-cache/
-- Gatsby Cloud should work well to store the generated files
-- We could write a caching plugin using a node p2p network like https://dat.foundation/ to eventually eliminate the need of a server for caching generated files

@@ -1,5 +1,5 @@
 # using-gatsby-transformer-video
 
-https://using-gatsby-transformer-video.gatsbyjs.org
+This demonstrates how to use gatsby-transformer-video and also acts as build test repo.
 
-Stub README description
+Deployed version: https://gatsbytransformervideo.gatsbyjs.io/
