@@ -159,7 +159,12 @@ export function getCacheDirs({
 }
 
 // Queue file for downloading till fetchRemoteFile supports queing
-const queueDownload = new PQueue({ concurrency: 5 })
+const queueDownload = new PQueue({
+  concurrency: 3,
+  intervalCap: 10,
+  interval: 1000,
+  carryoverConcurrencyCount: true,
+})
 export async function queueFetchRemoteFile(fetchData: IFetchRemoteFileOptions) {
   return queueDownload.add(() => fetchRemoteFile(fetchData))
 }
