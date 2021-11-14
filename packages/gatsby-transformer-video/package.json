@@ -46,7 +46,7 @@
     "@babel/cli": "^7.16.0",
     "@babel/core": "^7.16.0",
     "@types/command-exists": "^1.2.0",
-    "@types/fluent-ffmpeg": "^2.1.18",
+    "@types/fluent-ffmpeg": "^2.1.20",
     "@types/fs-extra": "^9.0.13",
     "@types/imagemin": "^8.0.0",
     "@types/imagemin-mozjpeg": "^8.0.1",

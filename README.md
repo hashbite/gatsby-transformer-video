@@ -7,7 +7,7 @@
 [![Github Check Badge](https://badgen.net/github/checks/hashbite/gatsby-transformer-video/main)](https://github.com/hashbite/gatsby-transformer-video/actions)
 [![License Badge](https://badgen.net/npm/license/gatsby-transformer-video)](https://github.com/hashbite/gatsby-transformer-video/blob/main/LICENSE)
 
-**This is a beta plugin and supports Gatsby v3 and v4. The videos will work fine on your website, we are working hard on improving the implementation code and to provide new features.**
+**This is a beta plugin and supports Gatsby v4.1.4 only. The videos will work fine on your website, we are working hard on improving the implementation code and to provide new features.**
 
 :warning::warning::warning: Converting videos might take a lot of time. Make sure to have an effective caching mechanism in place. See [caching](#caching)
 
